@@ -1,5 +1,5 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
-% Part 2B - Stepwise fault in sensor
+% Part 2C - Faults in actuator
 clear
 %clf
 
@@ -42,8 +42,8 @@ psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
 % Fault setup
-stepFaultActuator = deg2rad(1);           % stepwise fault of 10 degrees (rad)
-driftRateActuator = deg2rad(0.5);  
+stepFaultActuator = deg2rad(1);           % stepwise fault of 1 degrees (rad)
+driftRateActuator = deg2rad(0.01);  
 
 % Simulation Loop %
 for time = 0:stepSize:endTime
@@ -62,15 +62,22 @@ for time = 0:stepSize:endTime
         deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
     end
 
-    deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2))) + stepFaultActuator;
-    
+    % Rudder command %
+    deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
+
     % Apply Saturation Limit %
-    u(2) = max(-deltaMax, min(deltaMax, deltaR));
-    
-    % Apply Actuator Rate & Saturation Limits %
+    deltaR = max(-deltaMax, min(deltaMax, deltaR));
+
+    % Rate & Saturation Limits %
     if i > 1
-        u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
+        u = limitActuators([u(1); deltaR], uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
     end
+
+    % Apply Stepwise Fault %
+    u(2) = u(2) + (driftRateActuator * time);
+
+    % Saturation check %
+    u(2) = max(-deltaMax, min(deltaMax, u(2)));
 
     % Store rudder input % 
     uout(i,:) = u'; 

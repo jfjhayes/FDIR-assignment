@@ -1,5 +1,5 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
-% Part 2B - Stepwise fault in sensor
+% Part 2B - Faults in sensor
 clear
 %clf
 
