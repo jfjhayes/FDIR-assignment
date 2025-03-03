@@ -52,7 +52,7 @@ for time = 0:stepSize:endTime
     end    
 
     % Zig-zag logic % 
-    if abs(x(5)) >= psiTarget                          % If yaw angle reaches ±20°
+    if abs(x(5)) >= psiTarget                          % If yaw angle reaches ±20 deg
         deltaRCommand = -sign(x(5)) * deg2rad(20);     % Reverse rudder input
     end
 
@@ -109,3 +109,4 @@ set(gca,"TickLabelInterpreter",'latex');
 grid on;
 
 saveas(gcf, '2a_yaw_rate.eps', 'epsc');
+

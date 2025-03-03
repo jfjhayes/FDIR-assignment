@@ -1,4 +1,5 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
+% Part 2B - Stepwise fault in sensor
 clear
 %clf
 
@@ -34,10 +35,15 @@ tout = zeros(numSteps, 1);                  % time
 xdotout = zeros(numSteps, length(xdot));    % state derivatives
 xout = zeros(numSteps, length(x));          % states    
 uout = zeros(numSteps, length(u));          % actuator inputs
+psiFaultout = zeros(numSteps, 1);           % faulty heading angle
 
-% Zig-zag Setup % 
-psiTarget = deg2rad(20);                    % heading target
-deltaRCommand = deg2rad(20);                % initial rudder command 
+% Zig-zag Setup %  
+psiTarget = deg2rad(20);                    % heading target (rad)
+deltaRCommand = deg2rad(20);                % initial rudder command (rad)
+
+% Fault Setup %
+stepFault = deg2rad(10);                    % stepwise fault of 10 degrees (rad)
+driftRate = deg2rad(0.5);                   % driftwise fault drift rate of 0.5 deg/s (rad/s)
 
 % Simulation Loop %
 for time = 0:stepSize:endTime
@@ -45,15 +51,18 @@ for time = 0:stepSize:endTime
     % Data Logging for each commInterval %
     if rem(time, commInterval)==0
         i = i+1;
-        tout(i) = time;                     % store time
-        xdotout(i,:) = xdot;	            % store state derivatives
-        xout(i,:) = x;                      % store states
-        uout(i,:) = u;                      % store actuators inputs
+        tout(i) = time;                                 % store time
+        xdotout(i,:) = xdot;	                        % store state derivatives
+        xout(i,:) = x;                                  % store states
+        uout(i,:) = u;                                  % store actuators inputs
+        % psiFaultout(i,:) = x(5) + stepFault;          % store faulty heading angle (STEPWISE)
+        psiFaultout(i,:) = x(5) + (driftRate * time);   % store faulty heading angle (DRIFTWISE)
     end    
 
     % Zig-zag logic % 
-    if abs(x(5)) >= psiTarget                          % If yaw angle reaches ±20°
-        deltaRCommand = -sign(x(5)) * deg2rad(20);     % Reverse rudder input
+    %if abs(x(5) + stepFault) >= psiTarget              % If sensor yaw exceeds ±20 deg (STEPWISE)
+    if abs(x(5) + (driftRate * time)) >= psiTarget      % If sensor yaw exceeds ±20 deg (DRIFTWISE)
+        deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
     end
 
     deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
@@ -74,3 +83,70 @@ for time = 0:stepSize:endTime
     x = RK4(@latModel, stepSize, x, u);     % find states using RK4
 
 end
+
+% Output Plotting % 
+%{
+figure;
+plot(tout, rad2deg(xout(:,5)), 'b', 'LineWidth', 1.5); hold on;
+plot(tout, rad2deg(psiFaultout), 'r--', 'LineWidth', 1.5);
+ylim([-275 600]);
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
+set(gca,"TickLabelInterpreter",'latex');
+legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+grid on;
+hold off;
+
+saveas(gcf, '2b_stepwise_yaw.eps', 'epsc');
+
+stairs(tout, rad2deg(uout(:,2)));  
+ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex'); 
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylim([-25 25]);
+set(gca,"TickLabelInterpreter",'latex');
+grid on;
+
+saveas(gcf, '2b_stepwise_rudder_deflection.eps', 'epsc');
+
+%subplot(3,1,3); 
+plot(tout, rad2deg(xout(:,2)));  
+ylabel('$r$ (deg/s)', 'Interpreter', 'latex'); 
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylim([-40 40]);
+set(gca,"TickLabelInterpreter",'latex');
+grid on;
+
+saveas(gcf, '2b_stepwise_yaw_rate.eps', 'epsc');
+%}
+
+figure;
+plot(tout, rad2deg(xout(:,5)), 'b', 'LineWidth', 1.5); hold on;
+plot(tout, rad2deg(psiFaultout), 'r--', 'LineWidth', 1.5);
+ylim([-275 600]);
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
+set(gca,"TickLabelInterpreter",'latex');
+legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+grid on;
+hold off;
+
+saveas(gcf, '2b_driftwise_yaw.eps', 'epsc');
+
+stairs(tout, rad2deg(uout(:,2)));  
+ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex'); 
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylim([-25 25]);
+set(gca,"TickLabelInterpreter",'latex');
+grid on;
+
+saveas(gcf, '2b_driftwise_rudder_deflection.eps', 'epsc');
+
+%subplot(3,1,3); 
+plot(tout, rad2deg(xout(:,2)));  
+ylabel('$r$ (deg/s)', 'Interpreter', 'latex'); 
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylim([-40 40]);
+set(gca,"TickLabelInterpreter",'latex');
+grid on;
+
+saveas(gcf, '2b_driftwise_yaw_rate.eps', 'epsc');
