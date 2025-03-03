@@ -74,38 +74,3 @@ for time = 0:stepSize:endTime
     x = RK4(@latModel, stepSize, x, u);     % find states using RK4
 
 end
-
-% Output Plotting %
-figure;
-%subplot(3,1,1);
-plot(tout, rad2deg(xout(:,5))); 
-ylabel('$\psi$ (deg)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-275 600]);
-set(gca,"TickLabelInterpreter",'latex');
-%title('Yaw Angle Over Time', 'Interpreter', 'latex'); 
-grid on;
-
-saveas(gcf, '2a_yaw_angle.eps', 'epsc');
-
-%subplot(3,1,2); 
-stairs(tout, rad2deg(uout(:,2)));  
-ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-25 25]);
-set(gca,"TickLabelInterpreter",'latex');
-%title('Rudder Actuator Deflection Over Time', 'Interpreter', 'latex'); 
-grid on;
-
-saveas(gcf, '2a_rudder_deflection.eps', 'epsc');
-
-%subplot(3,1,3); 
-plot(tout, rad2deg(xout(:,2)));  
-ylabel('$r$ (deg/s)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-40 40]);
-set(gca,"TickLabelInterpreter",'latex');
-%title('Yaw Rate Over Time', 'Interpreter', 'latex'); 
-grid on;
-
-saveas(gcf, '2a_yaw_rate.eps', 'epsc');
