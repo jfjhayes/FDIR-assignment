@@ -58,12 +58,13 @@ for time = 0:stepSize:endTime
         xout(i,:) = x;                                  % store states
         uout(i,:) = u;                                  % store actuators inputs
         xoutFaulty(i,:) = xFaulty;                      % store faulty states
+
     end    
 
     % Add faults, comment both for unfaulty %
     xFaulty = x;
-    %xFaulty(5) = x(5) + stepFault;                      % STEPWISE
-    xFaulty(5) = x(5) + (driftRate * time);             % DRIFTWISE
+    xFaulty(5) = x(5) + stepFault;                      % STEPWISE
+    %xFaulty(5) = x(5) + (driftRate * time);             % DRIFTWISE
 
     % Zig-zag logic % 
     if abs(xFaulty(5)) >= psiTarget                     % If yaw exceeds ±20 deg 
@@ -79,7 +80,6 @@ for time = 0:stepSize:endTime
         u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
     end
 
-    % Store rudder inputs % 
     uout(i,:) = u';
     uoutFaulty(i,:) = u';
 
@@ -104,7 +104,7 @@ if exportMode
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
-    legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+    legend('Reference Heading', 'Faulty Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
     saveas(gcf, '2b_driftwise_yaw.eps', 'epsc');
@@ -139,7 +139,7 @@ else
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     title('Effect of Sensor Fault on Heading', 'Interpreter', 'latex');
-    legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+    legend('Reference Heading', 'Faulty Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
 
