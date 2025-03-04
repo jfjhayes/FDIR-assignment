@@ -66,11 +66,11 @@ for time = 0:stepSize:endTime
     xFaulty(5) = x(5) + (driftRate * time);             % DRIFTWISE
 
     % Zig-zag logic % 
-    if abs(xFaulty(5)) >= psiTarget  
-        deltaRCommand = -sign(x(5)) * deg2rad(20);
+    if abs(xFaulty(5)) >= psiTarget                     % If yaw exceeds ±20 deg 
+        deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
     end
 
-    % Apply Actuator Rate Limit %
+    % Rudder command & Apply Actuator Rate Limit %
     deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
     u(2) = max(-deltaMax, min(deltaMax, deltaR));
 
@@ -87,13 +87,13 @@ for time = 0:stepSize:endTime
     xdot = latModel(x, u);
     xdotFaulty = latModel(xFaulty, u);
 
-    % RK4 Integration %
+    % Find states using RK4 %
     x = RK4(@latModel, stepSize, x, u);
     xFaulty = RK4(@latModel, stepSize, xFaulty, u);
 end
 
 % Output Plotting %
-exportMode = true;
+exportMode = false;
 
 if exportMode
     % Individual plots
