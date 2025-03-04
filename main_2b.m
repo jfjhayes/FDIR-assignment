@@ -14,6 +14,7 @@ deltaR = 0;                                 % rudder deflection angle (rad)
 x = [p, r, beta, phi, psi]';                % state vector
 u = [deltaA, deltaR]';                      % input vector
 xdot = zeros(5,1);                          % state derivatives
+xFaulty = zeros(5,1);                       % faulty state vector
 
 % Initial Conditions %
 u0 = 30;                                    % longitudinal velocity (ms^-1)
@@ -31,17 +32,18 @@ i = 0;                                      % initialise counter
 
 % Preallocate storage arrays (stops MATLAB being angry w/ me) %
 numSteps = endTime / commInterval + 1;
-tout = zeros(numSteps, 1);                  % time
-xdotout = zeros(numSteps, length(xdot));    % state derivatives
-xout = zeros(numSteps, length(x));          % states    
-uout = zeros(numSteps, length(u));          % actuator inputs
-psiFaultout = zeros(numSteps, 1);           % faulty heading angle
+tout = zeros(numSteps, 1);                   % time
+xdotout = zeros(numSteps, length(xdot));     % state derivatives
+xout = zeros(numSteps, length(x));           % states
+xoutFaulty = zeros(numSteps, length(x));     % faulty states
+uout = zeros(numSteps, length(u));           % actuator inputs
+uoutFaulty = zeros(numSteps, length(u));     % faulty actuator inputs
 
 % Zig-zag Setup %  
 psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
-% Fault Setup %
+% Sensor Fault Setup %
 stepFault = deg2rad(10);                    % stepwise fault of 10 degrees (rad)
 driftRate = deg2rad(0.5);                   % driftwise fault drift rate of 0.5 deg/s (rad/s)
 
@@ -55,98 +57,107 @@ for time = 0:stepSize:endTime
         xdotout(i,:) = xdot;	                        % store state derivatives
         xout(i,:) = x;                                  % store states
         uout(i,:) = u;                                  % store actuators inputs
-        % psiFaultout(i,:) = x(5) + stepFault;          % store faulty heading angle (STEPWISE)
-        psiFaultout(i,:) = x(5) + (driftRate * time);   % store faulty heading angle (DRIFTWISE)
+        xoutFaulty(i,:) = xFaulty;                      % store faulty states
     end    
 
+    % Add faults, comment both for unfaulty %
+    xFaulty = x;
+    %xFaulty(5) = x(5) + stepFault;                      % STEPWISE
+    xFaulty(5) = x(5) + (driftRate * time);             % DRIFTWISE
+
     % Zig-zag logic % 
-    %if abs(x(5) + stepFault) >= psiTarget              % If sensor yaw exceeds ±20 deg (STEPWISE)
-    if abs(x(5) + (driftRate * time)) >= psiTarget      % If sensor yaw exceeds ±20 deg (DRIFTWISE)
-        deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
+    if abs(xFaulty(5)) >= psiTarget  
+        deltaRCommand = -sign(x(5)) * deg2rad(20);
     end
 
+    % Apply Actuator Rate Limit %
     deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
-    
-    % Apply Saturation Limit %
     u(2) = max(-deltaMax, min(deltaMax, deltaR));
-    
-    % Apply Actuator Rate & Saturation Limits %
+
+    % Apply Actuator Saturation and Rate Limits %
     if i > 1
         u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
     end
 
-    % Store rudder input % 
-    uout(i,:) = u'; 
+    % Store rudder inputs % 
+    uout(i,:) = u';
+    uoutFaulty(i,:) = u';
 
-    % State Space Updates %
-    xdot = latModel(x, u);                  % update state derivatives
-    x = RK4(@latModel, stepSize, x, u);     % find states using RK4
+    % Compute State Derivatives %
+    xdot = latModel(x, u);
+    xdotFaulty = latModel(xFaulty, u);
 
+    % RK4 Integration %
+    x = RK4(@latModel, stepSize, x, u);
+    xFaulty = RK4(@latModel, stepSize, xFaulty, u);
 end
 
-% Output Plotting % 
-%{
-figure;
-plot(tout, rad2deg(xout(:,5)), 'b', 'LineWidth', 1.5); hold on;
-plot(tout, rad2deg(psiFaultout), 'r--', 'LineWidth', 1.5);
-ylim([-275 600]);
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
-set(gca,"TickLabelInterpreter",'latex');
-legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
-grid on;
-hold off;
+% Output Plotting %
+exportMode = true;
 
-saveas(gcf, '2b_stepwise_yaw.eps', 'epsc');
+if exportMode
+    % Individual plots
+    figure;
+    plot(tout, rad2deg(xout(:,5)), 'LineWidth', 1.5); hold on;
+    plot(tout, rad2deg(xoutFaulty(:,5)), 'r--', 'LineWidth', 1.5);
+    ylim([-275 600]);
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
+    set(gca, "TickLabelInterpreter", 'latex');
+    legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+    grid on;
+    hold off;
+    saveas(gcf, '2b_driftwise_yaw.eps', 'epsc');
 
-stairs(tout, rad2deg(uout(:,2)));  
-ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-25 25]);
-set(gca,"TickLabelInterpreter",'latex');
-grid on;
+    figure;
+    stairs(tout, rad2deg(uout(:,2)), 'LineWidth', 1.5);
+    ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylim([-25 25]);
+    set(gca, "TickLabelInterpreter", 'latex');
+    grid on;
+    saveas(gcf, '2b_driftwise_rudder_deflection.eps', 'epsc');
 
-saveas(gcf, '2b_stepwise_rudder_deflection.eps', 'epsc');
+    figure;
+    plot(tout, rad2deg(xout(:,2)), 'LineWidth', 1.5);
+    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylim([-40 40]);
+    set(gca, "TickLabelInterpreter", 'latex');
+    grid on;
+    saveas(gcf, '2b_driftwise_yaw_rate.eps', 'epsc');
 
-%subplot(3,1,3); 
-plot(tout, rad2deg(xout(:,2)));  
-ylabel('$r$ (deg/s)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-40 40]);
-set(gca,"TickLabelInterpreter",'latex');
-grid on;
+else
+    % Subplots
+    figure;
 
-saveas(gcf, '2b_stepwise_yaw_rate.eps', 'epsc');
-%}
+    subplot(3,1,1);
+    plot(tout, rad2deg(xout(:,5)), 'LineWidth', 1.5); hold on;
+    plot(tout, rad2deg(xoutFaulty(:,5)), 'r--', 'LineWidth', 1.5);
+    ylim([-275 600]);
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
+    set(gca, "TickLabelInterpreter", 'latex');
+    title('Effect of Sensor Fault on Heading', 'Interpreter', 'latex');
+    legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
+    grid on;
+    hold off;
 
-figure;
-plot(tout, rad2deg(xout(:,5)), 'b', 'LineWidth', 1.5); hold on;
-plot(tout, rad2deg(psiFaultout), 'r--', 'LineWidth', 1.5);
-ylim([-275 600]);
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
-set(gca,"TickLabelInterpreter",'latex');
-legend('True Heading', 'Faulty Heading', 'Interpreter', 'latex');
-grid on;
-hold off;
+    subplot(3,1,2);
+    stairs(tout, rad2deg(uout(:,2)), 'LineWidth', 1.5);
+    ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylim([-25 25]);
+    set(gca, "TickLabelInterpreter", 'latex');
+    title('Rudder Deflection Over Time', 'Interpreter', 'latex');
+    grid on;
 
-saveas(gcf, '2b_driftwise_yaw.eps', 'epsc');
-
-stairs(tout, rad2deg(uout(:,2)));  
-ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-25 25]);
-set(gca,"TickLabelInterpreter",'latex');
-grid on;
-
-saveas(gcf, '2b_driftwise_rudder_deflection.eps', 'epsc');
-
-%subplot(3,1,3); 
-plot(tout, rad2deg(xout(:,2)));  
-ylabel('$r$ (deg/s)', 'Interpreter', 'latex'); 
-xlabel('Time (s)', 'Interpreter', 'latex');
-ylim([-40 40]);
-set(gca,"TickLabelInterpreter",'latex');
-grid on;
-
-saveas(gcf, '2b_driftwise_yaw_rate.eps', 'epsc');
+    subplot(3,1,3);
+    plot(tout, rad2deg(xout(:,2)), 'LineWidth', 1.5);
+    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylim([-40 40]);
+    set(gca, "TickLabelInterpreter", 'latex');
+    title('Yaw Rate Over Time', 'Interpreter', 'latex');
+    grid on;
+end

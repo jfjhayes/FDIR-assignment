@@ -42,8 +42,8 @@ psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
 % Fault setup
-stepFaultActuator = deg2rad(1);           % stepwise fault of 1 degrees (rad)
-driftRateActuator = deg2rad(0.01);  
+stepFaultActuator = deg2rad(1);             % stepwise fault of 1 degrees (rad)
+driftRateActuator = deg2rad(0.1);          % driftwise fault of 0.1 deg/s (rad/s)
 
 % Simulation Loop %
 for time = 0:stepSize:endTime
