@@ -53,7 +53,7 @@ deltaRCommandFaulty = deg2rad(20);
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
 driftRateSensor = deg2rad(5);              % sensor driftwise fault drift rate of 0.5 deg/s (rad/s)
-stepFaultActuator = deg2rad(10);             % actuator stepwise fault of 1 degrees (rad)
+stepFaultActuator = deg2rad(0.1);             % actuator stepwise fault of 1 degrees (rad)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 
 % Fault toggles & output settings % 
@@ -120,7 +120,7 @@ for time = 0:stepSize:endTime
     xdot = latModel(x, u);
     x = RK4(@latModel, stepSize, x, u);
 
-    % FAULTY STUFF BELOW % 
+    % FAULTY STUFF BELOW CHECK YOUR SENSORS VS YOUR ACTUATORS IDIOT% 
     % Fault Zig-zag logic %        
     if abs(xFaulty(5)) >= psiTarget                                 % If yaw exceeds ±20 deg 
         deltaRCommandFaulty = -sign(xFaulty(5)) * deg2rad(20);       % Reverse rudder input
