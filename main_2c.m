@@ -64,8 +64,8 @@ for time = 0:stepSize:endTime
 
     % Apply faults, comment both for unfaulty, uncomment both for something messed up and evil %
     uFaulty = u;
-    %uFaulty(2) = u(2) + stepFaultActuator;              % STEPWISE
-    uFaulty(2) = u(2) + (driftRateActuator * time);     % DRIFTWISE
+    uFaulty(2) = u(2) + stepFaultActuator;              % STEPWISE
+    %uFaulty(2) = u(2) + (driftRateActuator * time);     % DRIFTWISE
 
     % Zig-zag logic %        
     if abs(x(5)) >= psiTarget                           % If yaw exceeds ±20 deg 

@@ -11,13 +11,26 @@ phi = 0;                                    % roll angle (rad)
 psi = 0;                                    % yaw angle (rad)
 deltaA = 0;                                 % aileron deflection angle (rad)
 deltaR = 0;                                 % rudder deflection angle (rad)
+
+pFault = 0;                                      % roll rate (rads^-1)
+rFault = 0;                                      % yaw rate (rads^-1)
+betaFault = 0;                                   % sideslip angle (rad)
+phiFault = 0;                                    % roll angle (rad)
+psiFault = 0;                                    % yaw angle (rad)
+deltaAFaulty = 0;                                 % aileron deflection angle (rad)
 deltaRFaulty = 0;
-x = [p, r, beta, phi, psi]';                % state vector
-u = [deltaA, deltaR]';                      % input vector
+
+x = [p, r, beta, phi, psi]';                        % faulty state vector
+u = [deltaA, deltaR]';   
+
+xFaulty = [pFault, rFault, betaFault, phiFault, psiFault]';                % state vector
+uFaulty = [deltaAFaulty, deltaRFaulty]';                      % input vector
+
 xdot = zeros(5,1);                          % state derivatives
-xFaulty = zeros(5,1);                       % faulty state vector
-uFaulty = zeros(2,1);                       % faulty input vector
 xdotFaulty = zeros(5,1);
+
+xParity = zeros(5,1);
+uParity = zeros(2,1);
 
 % Initial Conditions %
 u0 = 30;                                    % longitudinal velocity (ms^-1)
@@ -28,9 +41,9 @@ deltaMax = deg2rad(50);                     % actuator max amplitude deflection 
 deltaMaxRate = deg2rad(25);                 % actuator max rate limit (rads^-1)
 
 % Simulation Conditions %
-stepSize = 0.01;                            % integration step size
-commInterval = 0.01;                        % communications interval
-endTime = 120;                              % simulation duration (s)
+stepSize = 0.001;                            % integration step size
+commInterval = 0.001;                        % communications interval
+endTime = 100;                              % simulation duration (s)
 i = 0;                                      % initialise counter
 
 % Preallocate storage arrays (stops MATLAB being angry w/ me) %
@@ -45,22 +58,25 @@ xoutFaulty = zeros(numSteps, length(xFaulty));    % faulty states
 uout = zeros(numSteps, length(u));          % actuator inputs
 uoutFaulty = zeros(numSteps, length(uFaulty));    % faulty actuator inputs
 
+xParityout = zeros(numSteps, length(xParity));
+uParityout = zeros(numSteps, length(uParity));
+
 % Zig-zag Setup %  
 psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 deltaRCommandFaulty = deg2rad(20);
 
 % Fault setup %
-stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
+stepFaultSensor = deg2rad(30);              % sensor stepwise fault of 10 degrees (rad)
 driftRateSensor = deg2rad(5);              % sensor driftwise fault drift rate of 0.5 deg/s (rad/s)
-stepFaultActuator = deg2rad(0.1);             % actuator stepwise fault of 1 degrees (rad)
+stepFaultActuator = deg2rad(1);             % actuator stepwise fault of 1 degrees (rad)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 
 % Fault toggles & output settings % 
 faultStartTime = 30;                        % fault start time (s)
-stepSensor = false;
+stepSensor = true;
 driftSensor = false;
-stepActuator = true;
+stepActuator = false;
 driftActuator = false;
 exportMode = false;                         % controls plots saving as eps
 
@@ -78,10 +94,12 @@ for time = 0:stepSize:endTime
         xdotoutFaulty(i,:) = xdotFaulty;                % store faulty state derivatives
         xoutFaulty(i,:) = xFaulty;                      % store faulty states
         uoutFaulty(i,:) = uFaulty;                      % store faulty actuator inputs
+        xParityout(i,:) = xFaulty - xParity;
+        uParityout(i,:) = uParity;
     end    
 
     % Apply faults after faultStartTime %
-    if time >= faultStartTime
+    if time == faultStartTime
         if stepSensor
             xFaulty(5) = xFaulty(5) + stepFaultSensor;
         end
@@ -94,9 +112,6 @@ for time = 0:stepSize:endTime
         if driftActuator
             uFaulty(2) = uFaulty(2) + driftRateActuator * (time - faultStartTime);
         end
-    else
-        xFaulty = x;
-        uFaulty = u;
     end
 
     % Reference Zig-zag logic %        
@@ -138,11 +153,25 @@ for time = 0:stepSize:endTime
     % store faulty actuator inputs %
     uoutFaulty(i,:) = uFaulty';
 
+    uParityout(i,:) = uFaulty' - u';
+
+    xdotParity = latModel(x, uFaulty);
+    xParity = RK4(@latModel, stepSize, x, uFaulty);
+
     % Compute Faulty State Derivatives and States %
     xdotFaulty = latModel(xFaulty, uFaulty);
     xFaulty = RK4(@latModel, stepSize, xFaulty, uFaulty);
 
+
 end
+
+subplot(2,1,1);
+plot(tout, rad2deg(xParityout(:,5)));
+grid on;
+
+subplot(2,1,2);
+plot(tout, rad2deg(uParityout(:,2)));
+grid on;
 
 % Output Plotting %
 if exportMode
