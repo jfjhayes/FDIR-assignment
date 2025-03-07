@@ -103,8 +103,8 @@ deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
-driftRateSensor = deg2rad(1);               % sensor driftwise fault drift rate of 0.5 deg/s (rad/s)
-stepFaultActuator = deg2rad(1);             % actuator stepwise fault of 1 degrees (rad)
+stepFaultActuator = deg2rad(10);             % actuator stepwise fault of 1 degree (rad)
+driftRateSensor = deg2rad(1);               % sensor driftwise fault of 1 deg/s (rad)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 
 % Fault toggles % 
@@ -132,19 +132,15 @@ for time = 0:stepSize:endTime
         if stepSensor && ~faultApplied
             x(5) = x(5) + stepFaultSensor;
         end
-
         if stepActuator
             u(2) = u(2) + stepFaultActuator;
         end
-
         if driftSensor
             x(5) = x(5) + (driftRateSensor * stepSize);
         end
-
         if driftActuator
             u(2) = u(2) + (driftRateActuator * stepSize);
         end
-
         faultApplied = true;
     end
 
