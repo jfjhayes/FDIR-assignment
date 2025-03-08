@@ -10,17 +10,6 @@ z0 = 500;                                   % altitude (m)
 deltaMax = deg2rad(50);                     % actuator max amplitude deflection (rad)
 deltaMaxRate = deg2rad(25);                 % actuator max rate limit (rads^-1)
 
-% Simulation Conditions % 
-stepSize = 0.001;                           % integration step size
-commInterval = 0.001;                       % communications interval
-endTime = 120;                              % simulation duration (s)
-i = 0;                                      % initialise counter
-
-% Preallocate generic simulation storage arrays (stops MATLAB being angry w/ me) %
-numSteps = endTime / commInterval + 1;
-tout = zeros(numSteps, 1);                  % time
-
-
 %% Reference Simulation
 pRef = 0;                                           % roll rate (rads^-1)
 rRef = 0;                                           % yaw rate (rads^-1)
@@ -34,25 +23,33 @@ xRef = [pRef, rRef, betaRef, phiRef, psiRef]';      % state vector
 xdotRef = zeros(5,1);                               % state derivatives
 uRef = [deltaARef, deltaRRef]';                     % input vector
 
-% Preallocate reference simulation storage arrays % 
-xoutRef = zeros(numSteps, length(xRef));            % states    
-xdotoutRef = zeros(numSteps, length(xdotRef));      % state derivatives
-uoutRef = zeros(numSteps, length(uRef));            % actuator inputs
-
 % Zig-zag Setup %
 psiTargetRef = deg2rad(20);                         % heading target (rad)
 deltaRCommandRef = deg2rad(20);                     % initial rudder command (rad)
 
+% Simulation Conditions % 
+stepSizeRef = 0.1;                           % integration step size
+commIntervalRef = 0.1;                       % communications interval
+endTimeRef = 120;                              % simulation duration (s)
+iRef = 0;                                      % initialise counter
+
+% Preallocate reference simulation storage arrays (stops MATLAB being angry w/ me) %
+numStepsRef = endTimeRef / commIntervalRef + 1;
+toutRef = zeros(numStepsRef, 1);                        % time 
+xoutRef = zeros(numStepsRef, length(xRef));            % states    
+xdotoutRef = zeros(numStepsRef, length(xdotRef));      % state derivatives
+uoutRef = zeros(numStepsRef, length(uRef));            % actuator inputs
+
 % Simulation Loop % 
-for time = 0:stepSize:endTime
+for timeRef = 0:stepSizeRef:endTimeRef
 
     % Data logging for each commInterval
-    if rem(time, commInterval) == 0
-        i = i+1;
-        tout(i) = time;
-        xoutRef(i,:) = xRef;
-        xdotoutRef(i,:) = xdotRef;
-        uoutRef(i,:) = uRef;
+    if rem(timeRef, commIntervalRef) == 0
+        iRef = iRef+1;
+        toutRef(iRef) = timeRef;
+        xoutRef(iRef,:) = xRef;
+        xdotoutRef(iRef,:) = xdotRef;
+        uoutRef(iRef,:) = uRef;
     end
 
     % Reference Zig-zag logic % 
@@ -60,20 +57,20 @@ for time = 0:stepSize:endTime
         deltaRCommandRef = -sign(xRef(5)) * deg2rad(20);    % reverse rudder input
     end
 
-    % Reference Rudder Command & Actuator Rate limit % 
-    deltaRRef = uRef(2) + sign(deltaRCommandRef - uRef(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommandRef - uRef(2)));
+    % Reference Apply Actuator Saturation and Rate Limits %
+    if iRef > 1
+        uRef = limitActuatorsRef([uRef(1); uRef(2)], uoutRef(iRef-1,:)', deltaMax, deltaMaxRate, stepSizeRef);
+    end
+ 
+    % Reference Rudder Command & Actuator Rate limit %
+    deltaRRef = uRef(2) + sign(deltaRCommandRef - uRef(2)) * min(deltaMaxRate * stepSizeRef, abs(deltaRCommandRef - uRef(2)));
     uRef(2) = max(-deltaMax, min(deltaMax, deltaRRef));
 
-    % Reference Apply Actuator Saturation and Rate Limits %
-    if i > 1
-        uRef = limitActuators([uRef(1); uRef(2)], uoutRef(i-1,:)', deltaMax, deltaMaxRate, stepSize);
-    end
-
-    uoutRef(i,:) = uRef';
+    uoutRef(iRef,:) = uRef';
 
     % Compute reference state derivatives and states %
     xdotRef = latModel(xRef, uRef);
-    xRef = RK4(@latModel, stepSize, xRef, uRef);
+    xRef = RK4(@latModel, stepSizeRef, xRef, uRef);
 end
 
 %% Faulty (Real) Simulation
@@ -89,22 +86,27 @@ x = [p, r, beta, phi, psi]';                % state vector
 xdot = zeros(5,1);                          % state derivatives
 u = [deltaA, deltaR]';                      % input vector
 
-% Preallocate Faulty storage arrays %
-xout = zeros(numSteps, length(x));          % states    
-xdotout = zeros(numSteps, length(xdot));    % state derivatives
-uout = zeros(numSteps, length(u));          % actuator inputs
-
-% Reset Simulation Conditions % 
-i = 0;                                      % initialise counter
-
 % Zig-zag Setup %  
 psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
+% Simulation Conditions % 
+stepSize = 0.1;                           % integration step size
+commInterval = 0.1;                       % communications interval
+endTime = 120;                              % simulation duration (s)
+i = 0;                                      % initialise counter
+
+% Preallocate simulation storage arrays (stops MATLAB being angry w/ me) %
+numSteps = endTime / commInterval + 1;
+tout = zeros(numSteps, 1);                  % time
+xout = zeros(numSteps, length(x));          % states    
+xdotout = zeros(numSteps, length(xdot));    % state derivatives
+uout = zeros(numSteps, length(u));          % actuator inputs
+
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
-stepFaultActuator = deg2rad(10);             % actuator stepwise fault of 1 degree (rad)
-driftRateSensor = deg2rad(1);               % sensor driftwise fault of 1 deg/s (rad)
+stepFaultActuator = deg2rad(10);            % actuator stepwise fault of 10 degree (rad)
+driftRateSensor = deg2rad(0.5);             % sensor driftwise fault of 0.5 deg/s (rad)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 
 % Fault toggles % 
@@ -127,40 +129,35 @@ for time = 0:stepSize:endTime
         uout(i,:) = u;                                  % store actuator inputs
     end
 
-    % Apply faults after faultStartTime %
-    if time >= faultStartTime 
-        if stepSensor && ~faultApplied
-            x(5) = x(5) + stepFaultSensor;
-        end
-        if stepActuator
-            u(2) = u(2) + stepFaultActuator;
-        end
-        if driftSensor
-            x(5) = x(5) + (driftRateSensor * stepSize);
-        end
-        if driftActuator
-            u(2) = u(2) + (driftRateActuator * stepSize);
-        end
-        faultApplied = true;
-    end
-
-    % Reference Zig-zag logic %        
+    % Faulty Reference Zig-zag logic %        
     if abs(x(5)) >= psiTarget                           % If yaw exceeds ±20 deg 
         deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
     end
 
-    % Reference Rudder command & Actuator Rate limit %
+    % Apply sensor faults after faultStartTime %
+    % actuator faults now applied in limitActuators - 8/3/25 %
+    if time >= faultStartTime 
+        if stepSensor && ~faultApplied
+            x(5) = x(5) + stepFaultSensor;
+        end
+        faultApplied = true;
+        if driftSensor
+            x(5) = x(5) + (driftRateSensor * stepSize);
+        end
+    end
+
+    % Rudder Command & Actuator Rate limit %
     deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
     u(2) = max(-deltaMax, min(deltaMax, deltaR));
 
-    % Reference Apply Actuator Saturation and Rate Limits %
-    if i> 1
-        u = limitActuators([u(1); u(2)], uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
+    % Apply Actuator Saturation and Rate Limits %
+    if i > 1
+        u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepFaultActuator, driftRateActuator, stepActuator, driftActuator, time, faultStartTime, stepSize);
     end
 
     uout(i,:) = u';
 
-    % Compute reference state derivatives and states %
+    % Compute faulty state derivatives and states %
     xdot = latModel(x, u);
     x = RK4(@latModel, stepSize, x, u);
 end
