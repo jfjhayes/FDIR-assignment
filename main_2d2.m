@@ -2,7 +2,6 @@
 % Part 2D - Detection & Isolation Attempt 2
 clear
 close all
-exportMode = false;                         % controls plots saving as eps
 
 %% Initial Conditions - Common for all sims
 u0 = 30;                                    % longitudinal velocity (ms^-1)
@@ -107,17 +106,18 @@ uout = zeros(numSteps, length(u));          % actuator inputs
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
 stepFaultActuator = deg2rad(10);            % actuator stepwise fault of 10 degree (rad)
-driftRateSensor = deg2rad(2.5);             % sensor driftwise fault of 0.5 deg/s (rad)
-driftRateActuator = deg2rad(10);           % actuator driftwise fault of 10 deg/s (rad/s)
+driftRateSensor = deg2rad(2.5);             % sensor driftwise fault of 2.5 deg/s (rad/s)
+driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 
 % Fault toggles % 
 faultStartTime = 30;                        % fault start time (s)
-faultApplied = false;                       % initialise flag
+sensorFaultApplied = false;                 % initialise sensor flag
+actuatorFaultApplied = false;               % initialise actuator flag
 
 stepSensor = false;         % works
-stepActuator = false;       % no work
+stepActuator = false;       % works
 driftSensor = false;        % works
-driftActuator = false;       % works
+driftActuator = false;      % works
 
 for time = 0:stepSize:endTime
 
@@ -130,20 +130,6 @@ for time = 0:stepSize:endTime
         uout(i,:) = u;                                  % store actuator inputs
     end
 
-    % Actuator faults %
-    if time >= faultStartTime
-        if stepActuator
-            u(2) = u(2) + stepFaultActuator;
-        else
-            u(2) = u(2);
-        end
-        if driftActuator
-            u(2) = u(2) + (driftRateActuator * stepSize);
-        else
-            u(2) = u(2);
-        end
-    end
-
     if abs(x(5)) >= psiTarget
         deltaRCommand = -sign(x(5)) * deg2rad(20);
     end
@@ -152,9 +138,28 @@ for time = 0:stepSize:endTime
     deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
     u(2) = max(-deltaMax, min(deltaMax, deltaR));
 
+    % Actuator Faults % 
+    if time >= faultStartTime
+        if stepActuator && ~actuatorFaultApplied
+            actuatorFaultOffset = stepFaultActuator; 
+            actuatorFaultApplied = true;
+        end
+    
+        if driftActuator
+            actuatorFaultOffset = actuatorFaultOffset + (driftRateActuator * stepSize);
+        end
+    else
+        actuatorFaultOffset = 0;
+    end
+    
+    % Apply actuator faults BEFORE limiting %
+    if time >= faultStartTime
+        u(2) = deltaRCommand + actuatorFaultOffset;
+    end
+
     % Apply Actuator Saturation and Rate Limits %
     if i > 1
-        uFaulty = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
+        u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
     end
 
     uout(i,:) = u';
@@ -165,9 +170,9 @@ for time = 0:stepSize:endTime
 
     % Sensor faults % 
     if time >= faultStartTime
-        if stepSensor && ~faultApplied
+        if stepSensor && ~sensorFaultApplied
             x(5) = x(5) + stepFaultSensor;
-            faultApplied = true;
+            sensorFaultApplied = true;
         else
             x(5) = x(5);
         end
@@ -180,6 +185,8 @@ for time = 0:stepSize:endTime
 end
 
 %% Output Plotting
+exportMode = false;                         % controls plots saving as eps
+
 if exportMode
     % Individual plots
     figure;
@@ -192,7 +199,7 @@ if exportMode
     legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2d_driftwise_yaw.eps', 'epsc');
+    saveas(gcf, '2c_driftwise_yaw.eps', 'epsc');
 
     figure;
     stairs(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
@@ -204,7 +211,7 @@ if exportMode
     legend('Faulty Deflection', 'Reference Deflection', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2d_driftwise_rudder_deflection.eps', 'epsc');
+    saveas(gcf, '2c_driftwise_rudder_deflection.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
@@ -215,7 +222,7 @@ if exportMode
     set(gca, "TickLabelInterpreter", 'latex');
     legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
     grid on;
-    saveas(gcf, '2d_driftwise_yaw_rate.eps', 'epsc');
+    saveas(gcf, '2c_driftwise_yaw_rate.eps', 'epsc');
 
 else
     % Subplots
