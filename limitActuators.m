@@ -1,41 +1,13 @@
-function u_limited = limitActuators(u, u_prev, deltaMax, deltaMaxRate, stepFaultActuator, driftRateActuator, stepActuator, driftActuator, time, faultStartTime, stepSize)
+function u_limited = limitActuators(u, u_prev, deltaMax, deltaMaxRate, stepSize)
 
-    persistent actuatorFaultApplied faultedSignal;
+    % Applies Rate and Saturation Limits to actuator inputs % 
 
-    if isempty(actuatorFaultApplied)  % Initialize  first call
-        actuatorFaultApplied = false;
-        faultedSignal = u(2);
-    end
+    u_saturated = max(min(u, deltaMax), -deltaMax);
 
-    % Track reference signal until fault is applied %
-    if time < faultStartTime
-        faultedSignal = u(2);
-    end
+    maxChange = deltaMaxRate * stepSize;                            % max allowed change per step
+    deltaChange = u_saturated - u_prev;                             % change in input
 
-    % Apply faults ONLY ONCE after faultStartTime %
-    if time >= faultStartTime && ~actuatorFaultApplied
-        if stepActuator
-            faultedSignal = faultedSignal + stepFaultActuator;          % Apply step fault ONCE
-        end
-        actuatorFaultApplied = true;                                    % Markt fault applied
-    end
+    deltaChange = max(min(deltaChange, maxChange), -maxChange);     % apply rate limiting
 
-    if driftActuator && actuatorFaultApplied
-        faultedSignal = faultedSignal + driftRateActuator * stepSize;   % drift accumulates on the faulted signal
-    end
-
-    u_limited = u;
-    u_limited(2) = faultedSignal;
-
-    maxChange = deltaMaxRate * stepSize;                % max allowable rate of change
-    deltaChange = u_limited(2) - u_prev(2);             % change in actuator signal
-
-    if abs(deltaChange) > maxChange
-        deltaChange = sign(deltaChange) * maxChange; 
-    end
-
-    u_limited(2) = u_prev(2) + deltaChange;             % apply rate-limited change
-
- 
-    u_limited(2) = max(min(u_limited(2), deltaMax), -deltaMax);         % enforce actuator saturation limits
+    u_limited = u_prev + deltaChange;                               % limited input
 end

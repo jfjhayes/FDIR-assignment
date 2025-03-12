@@ -1,6 +1,7 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
 % Part 2D - Detection & Isolation Attempt 2
 clear
+close all
 exportMode = false;                         % controls plots saving as eps
 
 %% Initial Conditions - Common for all sims
@@ -28,14 +29,14 @@ psiTargetRef = deg2rad(20);                         % heading target (rad)
 deltaRCommandRef = deg2rad(20);                     % initial rudder command (rad)
 
 % Simulation Conditions % 
-stepSizeRef = 0.1;                           % integration step size
-commIntervalRef = 0.1;                       % communications interval
-endTimeRef = 120;                              % simulation duration (s)
-iRef = 0;                                      % initialise counter
+stepSizeRef = 0.01;                                 % integration step size
+commIntervalRef = 0.01;                             % communications interval
+endTimeRef = 120;                                   % simulation duration (s)
+iRef = 0;                                           % initialise counter
 
 % Preallocate reference simulation storage arrays (stops MATLAB being angry w/ me) %
 numStepsRef = endTimeRef / commIntervalRef + 1;
-toutRef = zeros(numStepsRef, 1);                        % time 
+toutRef = zeros(numStepsRef, 1);                       % time 
 xoutRef = zeros(numStepsRef, length(xRef));            % states    
 xdotoutRef = zeros(numStepsRef, length(xdotRef));      % state derivatives
 uoutRef = zeros(numStepsRef, length(uRef));            % actuator inputs
@@ -91,8 +92,8 @@ psiTarget = deg2rad(20);                    % heading target (rad)
 deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 
 % Simulation Conditions % 
-stepSize = 0.1;                           % integration step size
-commInterval = 0.1;                       % communications interval
+stepSize = 0.01;                            % integration step size
+commInterval = 0.01;                        % communications interval
 endTime = 120;                              % simulation duration (s)
 i = 0;                                      % initialise counter
 
@@ -106,17 +107,17 @@ uout = zeros(numSteps, length(u));          % actuator inputs
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
 stepFaultActuator = deg2rad(10);            % actuator stepwise fault of 10 degree (rad)
-driftRateSensor = deg2rad(0.5);             % sensor driftwise fault of 0.5 deg/s (rad)
-driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
+driftRateSensor = deg2rad(2.5);             % sensor driftwise fault of 0.5 deg/s (rad)
+driftRateActuator = deg2rad(10);           % actuator driftwise fault of 10 deg/s (rad/s)
 
 % Fault toggles % 
 faultStartTime = 30;                        % fault start time (s)
 faultApplied = false;                       % initialise flag
 
-stepSensor = false;
-stepActuator = true;
-driftSensor = false;
-driftActuator = false;
+stepSensor = false;         % works
+stepActuator = false;       % no work
+driftSensor = false;        % works
+driftActuator = false;       % works
 
 for time = 0:stepSize:endTime
 
@@ -129,21 +130,22 @@ for time = 0:stepSize:endTime
         uout(i,:) = u;                                  % store actuator inputs
     end
 
-    % Faulty Reference Zig-zag logic %        
-    if abs(x(5)) >= psiTarget                           % If yaw exceeds ±20 deg 
-        deltaRCommand = -sign(x(5)) * deg2rad(20);      % Reverse rudder input
+    % Actuator faults %
+    if time >= faultStartTime
+        if stepActuator
+            u(2) = u(2) + stepFaultActuator;
+        else
+            u(2) = u(2);
+        end
+        if driftActuator
+            u(2) = u(2) + (driftRateActuator * stepSize);
+        else
+            u(2) = u(2);
+        end
     end
 
-    % Apply sensor faults after faultStartTime %
-    % actuator faults now applied in limitActuators - 8/3/25 %
-    if time >= faultStartTime 
-        if stepSensor && ~faultApplied
-            x(5) = x(5) + stepFaultSensor;
-        end
-        faultApplied = true;
-        if driftSensor
-            x(5) = x(5) + (driftRateSensor * stepSize);
-        end
+    if abs(x(5)) >= psiTarget
+        deltaRCommand = -sign(x(5)) * deg2rad(20);
     end
 
     % Rudder Command & Actuator Rate limit %
@@ -152,7 +154,7 @@ for time = 0:stepSize:endTime
 
     % Apply Actuator Saturation and Rate Limits %
     if i > 1
-        u = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepFaultActuator, driftRateActuator, stepActuator, driftActuator, time, faultStartTime, stepSize);
+        uFaulty = limitActuators(u, uout(i-1,:)', deltaMax, deltaMaxRate, stepSize);
     end
 
     uout(i,:) = u';
@@ -160,6 +162,21 @@ for time = 0:stepSize:endTime
     % Compute faulty state derivatives and states %
     xdot = latModel(x, u);
     x = RK4(@latModel, stepSize, x, u);
+
+    % Sensor faults % 
+    if time >= faultStartTime
+        if stepSensor && ~faultApplied
+            x(5) = x(5) + stepFaultSensor;
+            faultApplied = true;
+        else
+            x(5) = x(5);
+        end
+        if driftSensor
+            x(5) = x(5) + (driftRateSensor * stepSize);
+        else
+            x(5) = x(5);
+        end
+    end
 end
 
 %% Output Plotting
