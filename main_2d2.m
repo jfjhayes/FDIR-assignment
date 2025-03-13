@@ -102,22 +102,26 @@ tout = zeros(numSteps, 1);                  % time
 xout = zeros(numSteps, length(x));          % states    
 xdotout = zeros(numSteps, length(xdot));    % state derivatives
 uout = zeros(numSteps, length(u));          % actuator inputs
+residualout = zeros(numSteps, length(x));   % residuals
 
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
 stepFaultActuator = deg2rad(10);            % actuator stepwise fault of 10 degree (rad)
 driftRateSensor = deg2rad(2.5);             % sensor driftwise fault of 2.5 deg/s (rad/s)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
-
-% Fault toggles % 
-faultStartTime = 30;                        % fault start time (s)
 sensorFaultApplied = false;                 % initialise sensor flag
 actuatorFaultApplied = false;               % initialise actuator flag
 
-stepSensor = false;         % works
+% Fault toggles % 
+faultStartTime = 30;        % fault start time (s)
+stepSensor = true;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
 driftActuator = false;      % works
+
+% FDI setup % 
+threshold = deg2rad(1);                                 % fault threshokd
+faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolan  
 
 for time = 0:stepSize:endTime
 
@@ -182,7 +186,30 @@ for time = 0:stepSize:endTime
             x(5) = x(5);
         end
     end
+
+    % Fault Detection & Isolation
+    residual = xout(i,:) - xoutRef(i,:);                    % calculate state vector residuals
+    residualout(i,:) = residual;                            % store state vector residuals
+
+    faultDetected(i,:) = abs(residual(5)) > threshold;      % set fault detected HIGH if above threshold
+
+    if faultDetected(i,:) == true
+        disp('FAULT');
+    end
 end
+
+figure;
+subplot(2,1,1);
+plot(tout, rad2deg(residualout(:,5)), 'r', 'LineWidth', 1.5); hold on;
+yline(rad2deg(threshold), 'k--');
+yline(-rad2deg(threshold), 'k--');
+xlabel('Time (s)', 'Interpreter', 'latex');
+ylabel('Residual $\psi$ (deg)', 'Interpreter', 'latex');
+title('Heading Residual', 'Interpreter', 'latex');
+grid on;
+
+subplot(2,1,2);
+plot(tout, faultDetected)
 
 %% Output Plotting
 exportMode = false;                         % controls plots saving as eps
