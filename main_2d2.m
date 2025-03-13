@@ -4,34 +4,34 @@ clear
 close all
 
 %% Initial Conditions - Common for all sims
-u0 = 30;                                    % longitudinal velocity (ms^-1)
-z0 = 500;                                   % altitude (m)
+u0 = 30;                                                % longitudinal velocity (ms^-1)
+z0 = 500;                                               % altitude (m)
 
-deltaMax = deg2rad(50);                     % actuator max amplitude deflection (rad)
-deltaMaxRate = deg2rad(25);                 % actuator max rate limit (rads^-1)
+deltaMax = deg2rad(50);                                 % actuator max amplitude deflection (rad)
+deltaMaxRate = deg2rad(25);                             % actuator max rate limit (rads^-1)
 
 %% Reference Simulation
-pRef = 0;                                           % roll rate (rads^-1)
-rRef = 0;                                           % yaw rate (rads^-1)
-betaRef = 0;                                        % sideslip angle (rad)
-phiRef = 0;                                         % roll angle (rad)
-psiRef = 0;                                         % yaw angle (rad)
-deltaARef = 0;                                      % aileron deflection angle (rad)
-deltaRRef = 0;                                      % rudder deflection angle (rad)
+pRef = 0;                                               % roll rate (rads^-1)
+rRef = 0;                                               % yaw rate (rads^-1)
+betaRef = 0;                                            % sideslip angle (rad)
+phiRef = 0;                                             % roll angle (rad)
+psiRef = 0;                                             % yaw angle (rad)
+deltaARef = 0;                                          % aileron deflection angle (rad)
+deltaRRef = 0;                                          % rudder deflection angle (rad)
 
-xRef = [pRef, rRef, betaRef, phiRef, psiRef]';      % state vector
-xdotRef = zeros(5,1);                               % state derivatives
-uRef = [deltaARef, deltaRRef]';                     % input vector
+xRef = [pRef, rRef, betaRef, phiRef, psiRef]';          % state vector
+xdotRef = zeros(5,1);                                   % state derivatives
+uRef = [deltaARef, deltaRRef]';                         % input vector
 
 % Zig-zag Setup %
-psiTargetRef = deg2rad(20);                         % heading target (rad)
-deltaRCommandRef = deg2rad(20);                     % initial rudder command (rad)
+psiTargetRef = deg2rad(20);                             % heading target (rad)
+deltaRCommandRef = deg2rad(20);                         % initial rudder command (rad)
 
 % Simulation Conditions % 
-stepSizeRef = 0.01;                                 % integration step size
-commIntervalRef = 0.01;                             % communications interval
-endTimeRef = 120;                                   % simulation duration (s)
-iRef = 0;                                           % initialise counter
+stepSizeRef = 0.01;                                     % integration step size
+commIntervalRef = 0.01;                                 % communications interval
+endTimeRef = 120;                                       % simulation duration (s)
+iRef = 1;                                               % initialise counter
 
 % Preallocate reference simulation storage arrays (stops MATLAB being angry w/ me) %
 numStepsRef = endTimeRef / commIntervalRef + 1;
@@ -94,7 +94,7 @@ deltaRCommand = deg2rad(20);                % initial rudder command (rad)
 stepSize = 0.01;                            % integration step size
 commInterval = 0.01;                        % communications interval
 endTime = 120;                              % simulation duration (s)
-i = 0;                                      % initialise counter
+i = 1;                                      % initialise counter
 
 % Preallocate simulation storage arrays (stops MATLAB being angry w/ me) %
 numSteps = endTime / commInterval + 1;
@@ -102,7 +102,7 @@ tout = zeros(numSteps, 1);                  % time
 xout = zeros(numSteps, length(x));          % states    
 xdotout = zeros(numSteps, length(xdot));    % state derivatives
 uout = zeros(numSteps, length(u));          % actuator inputs
-residualout = zeros(numSteps, length(x));   % residuals
+residualout = zeros(numSteps, 2);   % residuals
 
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
@@ -114,14 +114,18 @@ actuatorFaultApplied = false;               % initialise actuator flag
 
 % Fault toggles % 
 faultStartTime = 30;        % fault start time (s)
-stepSensor = true;         % works
+stepSensor = false;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
 driftActuator = false;      % works
 
 % FDI setup % 
-threshold = deg2rad(1);                                 % fault threshokd
-faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolan  
+stepThreshold = deg2rad(1);                           % step fault threshold
+driftThreshold = deg2rad(0.01);                          % drift fault threshold                       
+faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
+stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
+driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
+firstOccurence = true;                                  % stops repetition
 
 for time = 0:stepSize:endTime
 
@@ -187,22 +191,61 @@ for time = 0:stepSize:endTime
         end
     end
 
-    % Fault Detection & Isolation
-    residual = xout(i,:) - xoutRef(i,:);                    % calculate state vector residuals
-    residualout(i,:) = residual;                            % store state vector residuals
+    % Fault Detection %
+    sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
+    actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
+    residual = [sensorResidual actuatorResidual];                       % residual matrix
 
-    faultDetected(i,:) = abs(residual(5)) > threshold;      % set fault detected HIGH if above threshold
+    faultDetected(i,:) = abs(residual(1)) > stepThreshold || abs(residual(2)) > driftThreshold;     % set generic faultDetected HIGH if above either threshold
 
-    if faultDetected(i,:) == true
-        disp('FAULT');
+    % Residual Loop %
+    for j = 1:length(residual)
+        if i > 1
+            stepDetected(i,j) = abs(residual(j)) > stepThreshold;   % step?
+        end
+
+        if i > 10 && all(residualout(i-6:i-1, j) ~= 0)                  % wait long enough to establish trend
+            recentTrend = mean(diff(residualout(i-6:i-1, j)));          % take mean of last 5 results
+            driftDetected(i,j) = abs(recentTrend) > driftThreshold;     % drift?
+        else
+            driftDetected(i,j) = false;
+        end
+        
+        % Fault Isolation %
+        if stepDetected(i,j) || driftDetected(i,j)
+            if j == 1
+                faultLocation = "Sensor";
+            elseif j== 2
+                faultLocation = "Actuator";
+            else
+                faultLocation = "Unknown";
+            end
+
+            if stepDetected(i,j)
+                faultType = "Step Fault";
+            elseif driftDetected(i,j)
+                faultType = "Drift Fault";
+            else
+                faultType = "Unknown";
+            end
+
+            if firstOccurence
+                fprintf("Fault detected in %s: %s at time %d s\n ", faultLocation, faultType, round(tout(i)));     % what's up, Doc?
+                firstOccurence = false;
+            end
+        end
     end
+
+    % Store residual %
+    residualout(i,:) = residual;
+
 end
 
 figure;
 subplot(2,1,1);
-plot(tout, rad2deg(residualout(:,5)), 'r', 'LineWidth', 1.5); hold on;
-yline(rad2deg(threshold), 'k--');
-yline(-rad2deg(threshold), 'k--');
+plot(tout, rad2deg(residualout(:,2)), 'r', 'LineWidth', 1.5); hold on;
+yline(rad2deg(stepThreshold), 'k--');
+yline(-rad2deg(stepThreshold), 'k--');
 xlabel('Time (s)', 'Interpreter', 'latex');
 ylabel('Residual $\psi$ (deg)', 'Interpreter', 'latex');
 title('Heading Residual', 'Interpreter', 'latex');
