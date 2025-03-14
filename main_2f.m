@@ -121,8 +121,8 @@ driftSensor = false;        % works
 driftActuator = false;      % works
 
 % FDI setup % 
-stepThreshold = deg2rad(1);                             % step fault threshold
-driftThreshold = deg2rad(0.01);                         % drift fault threshold                       
+stepThreshold = deg2rad(10);                             % step fault threshold
+driftThreshold = deg2rad(5);                         % drift fault threshold                       
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
@@ -132,6 +132,9 @@ actuatorFaultDetected = false;                          % for controller
 
 % Noise setup %
 noiseMag = deg2rad(25);
+
+% Filter setup %
+alpha = 0.5;
 
 for time = 0:stepSize:endTime
 
@@ -179,7 +182,7 @@ for time = 0:stepSize:endTime
     % Actuator Recovery Step 2: Swap to aileron % 
     if actuatorFaultDetected
         if abs(x(4)) >= psiTarget
-            deltaACommand = -sign(x(4)) * deg2rad(20);
+        deltaACommand = -sign(x(4)) * deg2rad(20);
         end
 
         deltaA = u(1) + sign(deltaACommand - u(1)) * min(deltaMaxRate * stepSize, abs(deltaACommand - u(1)));
@@ -220,7 +223,14 @@ for time = 0:stepSize:endTime
     end
 
     % Bring the noise %
-    x(5) = x(5) + (noiseMag * randn());
+    if i > 20                                       % slight delay for filter to work
+        x(5) = x(5) + (noiseMag * randn());
+    end
+
+    % Savitzky-Golay filter % 
+    if i > 15
+        xout = sgolayfilt(xout, 5, 9);
+    end
 
     % Fault Detection %
     sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
@@ -274,13 +284,14 @@ for time = 0:stepSize:endTime
 
 end
 
+
 %% Output Plotting
 exportMode = true;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
     figure;
-    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 0.25); hold on;
+    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
     plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
     ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
@@ -289,7 +300,7 @@ if exportMode
     legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2f_unfaulty_yaw.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_sgolay_yaw.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
@@ -303,7 +314,7 @@ if exportMode
     legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2f_unfaulty_deflection.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_sgolay_deflection.eps', 'epsc');
 
 
     figure
@@ -316,7 +327,7 @@ if exportMode
     legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
     grid on;
     hold off
-    saveas(gcf, '2f_unfaulty_yaw_rate.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty__sgolay_yaw_rate.eps', 'epsc');
 
     figure
     plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
@@ -326,7 +337,7 @@ if exportMode
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    saveas(gcf, '2e_unfaulty_residual.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_sgolay_residual.eps', 'epsc');
 
 
 else
@@ -334,7 +345,7 @@ else
     figure;
 
     subplot(4,1,1);
-    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 0.25); hold on;
+    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
     plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
     ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
