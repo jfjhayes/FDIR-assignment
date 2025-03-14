@@ -118,7 +118,7 @@ faultStartTime = 30;        % fault start time (s)
 stepSensor = false;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
-driftActuator = true;      % works
+driftActuator = false;      % works
 
 % FDI setup % 
 stepThreshold = deg2rad(1);                             % step fault threshold
@@ -129,6 +129,9 @@ driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
 firstOccurence = true;                                  % stops repetition
 sensorFaultDetected = false;                            % for controller
 actuatorFaultDetected = false;                          % for controller
+
+% Noise setup %
+noiseMag = deg2rad(25);
 
 for time = 0:stepSize:endTime
 
@@ -216,6 +219,9 @@ for time = 0:stepSize:endTime
         end
     end
 
+    % Bring the noise %
+    x(5) = x(5) + (noiseMag * randn());
+
     % Fault Detection %
     sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
     actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
@@ -269,12 +275,12 @@ for time = 0:stepSize:endTime
 end
 
 %% Output Plotting
-exportMode = false;                         % controls plots saving as eps
+exportMode = true;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
     figure;
-    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
+    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 0.25); hold on;
     plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
     ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
@@ -283,7 +289,7 @@ if exportMode
     legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2e_actuator_drift_yaw.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_yaw.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
@@ -297,7 +303,7 @@ if exportMode
     legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '2e_actuator_drift_deflection.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_deflection.eps', 'epsc');
 
 
     figure
@@ -310,17 +316,17 @@ if exportMode
     legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
     grid on;
     hold off
-    saveas(gcf, '2e_actuator_drift_yaw_rate.eps', 'epsc');
+    saveas(gcf, '2f_unfaulty_yaw_rate.eps', 'epsc');
 
     figure
-    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
-    yline(rad2deg(driftThreshold), 'k--');
-    yline(-rad2deg(driftThreshold), 'k--');
+    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
+    %yline(rad2deg(driftThreshold), 'k--');
+    %yline(-rad2deg(driftThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    saveas(gcf, '2e_actuator_drift_residual.eps', 'epsc');
+    saveas(gcf, '2e_unfaulty_residual.eps', 'epsc');
 
 
 else
@@ -328,7 +334,7 @@ else
     figure;
 
     subplot(4,1,1);
-    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
+    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 0.25); hold on;
     plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
     ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
@@ -348,7 +354,7 @@ else
     ylim([-25 35]);
     set(gca, "TickLabelInterpreter", 'latex');
     title('Rudder Deflection Over Time', 'Interpreter', 'latex');
-    legend('Faulty $\delta_r$', 'Reference $\delta_r$', 'Recovery $\delta_a$', 'Interpreter', 'latex');
+    legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
     grid on;
     hold off;
 
@@ -365,7 +371,7 @@ else
     hold off
 
     subplot(4,1,4);
-    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
     yline(rad2deg(driftThreshold), 'k--');
     yline(-rad2deg(driftThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
