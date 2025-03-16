@@ -86,39 +86,39 @@ end
 
 
 %% Performance Analysis
-psi_deg = rad2deg(xoutRef(:,5));
-target_deg = rad2deg(psiTargetRef); 
+psiDegRef = rad2deg(xoutRef(:,5));
+targetDegRef = rad2deg(psiTargetRef); 
 tol = 0.5;
 
 % Rise time %
-idx10 = find(psi_deg >= 0.1 * target_deg, 1, 'first');
-idx90 = find(psi_deg >= 0.9 * target_deg, 1, 'first');
-if ~isempty(idx10) && ~isempty(idx90)
-    rise_time = toutRef(idx90) - toutRef(idx10);
+idx10Ref = find(psiDegRef >= 0.1 * targetDegRef, 1, 'first');
+idx90Ref = find(psiDegRef >= 0.9 * targetDegRef, 1, 'first');
+if ~isempty(idx10Ref) && ~isempty(idx90Ref)
+    riseTimeRef = toutRef(idx90Ref) - toutRef(idx10Ref);
 else
-    rise_time = NaN;
+    riseTimeRef = NaN;
 end
 
 % Overshoot %
-max_psi = max(psi_deg);
-overshoot = max(max_psi - target_deg, 0);
+maxPsiRef = max(psiDegRef);
+overshootRef = max(maxPsiRef - targetDegRef, 0);
 
 % Settling time %
-settling_time = NaN;
+settlingTimeRef = NaN;
 for k = 1:length(toutRef)
-    if all(abs(psi_deg(k:end) - target_deg) <= tol)
-        settling_time = toutRef(k) - manoeuvreStartTime;
+    if all(abs(psiDegRef(k:end) - targetDegRef) <= tol)
+        settlingTimeRef = toutRef(k) - manoeuvreStartTime;
         break;
     end
 end
 
 % SS error %
-steady_state_error = abs(psi_deg(end) - target_deg);
+steadyStateErrorRef = abs(psiDegRef(end) - targetDegRef);
 
-fprintf('Rise Time: %.2f sec\n', rise_time);
-fprintf('Overshoot: %.2f deg\n', overshoot);
-fprintf('Settling Time: %.2f sec\n', settling_time);
-fprintf('Steady-State Error: %.2f deg\n', steady_state_error);
+fprintf('Rise Time: %.2f sec\n', riseTimeRef);
+fprintf('Overshoot: %.2f deg\n', overshootRef);
+fprintf('Settling Time: %.2f sec\n', settlingTimeRef);
+fprintf('Steady-State Error: %.2f deg\n', steadyStateErrorRef);
 
 %% Output Plotting
 exportMode = true;                         % controls plots saving as eps
