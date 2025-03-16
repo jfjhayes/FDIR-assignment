@@ -140,9 +140,9 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
 stepSensor = false;         % works
-stepActuator = false;       % works
+stepActuator = true;       % works
 driftSensor = false;        % works
-driftActuator = true;      % works
+driftActuator = false;      % works
 
 for time = 0:stepSize:endTime
 
@@ -183,7 +183,7 @@ for time = 0:stepSize:endTime
 
     % MAKE THIS WORK FOR CL ACTUATOR FAULTS
     if time >= faultStartTime
-        u(2) = deltaRCommand + actuatorFaultOffset;
+        u(2) = u(2) + actuatorFaultOffset;
     end
 
     % Apply Actuator Saturation and Rate Limits %
@@ -219,7 +219,7 @@ fprintf('Faulty Rise Time: %.2f sec\n Faulty Overshoot: %.2f deg\n Faulty Settli
 
 
 %% Output Plotting
-exportMode = true;                         % controls plots saving as eps
+exportMode = false;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
@@ -233,7 +233,7 @@ if exportMode
     legend('Heading', 'Reference', 'Command', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3c_drift_yaw.eps', 'epsc');
+    saveas(gcf, '3c_step_yaw.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
@@ -244,7 +244,7 @@ if exportMode
     legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3c_drift_RUDdeflections.eps', 'epsc');
+    saveas(gcf, '3c_step_RUDdeflections.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,1)), 'r', 'LineWidth', 1.5); hold on;
@@ -255,7 +255,7 @@ if exportMode
     legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3c_drift_AIRdeflections.eps', 'epsc');
+    saveas(gcf, '3c_step_AIRdeflections.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
@@ -266,7 +266,7 @@ if exportMode
     legend('Yaw rate', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off
-    saveas(gcf, '3c_drift_yaw_rate.eps', 'epsc');
+    saveas(gcf, '3c_step_yaw_rate.eps', 'epsc');
 
 else
     % Subplots
