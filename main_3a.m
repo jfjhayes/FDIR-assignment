@@ -65,11 +65,11 @@ for timeRef = 0:stepSizeRef:endTimeRef
 
     % LQR controller % 
     if timeRef >= manoeuvreStartTime 
-        xDesRef = [0; 0; 0; 0; psiTargetRef];
+        xDesRef = [0 0 0 0 psiTargetRef]';
         errorRef = xRef - xDesRef;
         uRef = -0.06 * K * errorRef;
     else
-        xDesRef = [0; 0; 0; 0; 0];
+        xDesRef = [0 0 0 0 0]';
     end
 
     % Reference Apply Actuator Saturation and Rate Limits %
