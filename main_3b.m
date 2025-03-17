@@ -140,9 +140,9 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
 stepSensor = false;         % works
-stepActuator = true;       % works
+stepActuator = false;       % works
 driftSensor = false;        % works
-driftActuator = false;      % works
+driftActuator = true;      % works
 
 for time = 0:stepSize:endTime
 
@@ -181,7 +181,7 @@ for time = 0:stepSize:endTime
         actuatorFaultOffset = 0;
     end
 
-    % MAKE THIS WORK FOR CL ACTUATOR FAULTS
+    % Apply actuator faults % 
     if time >= faultStartTime
         u(2) = u(2) + actuatorFaultOffset;
     end

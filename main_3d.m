@@ -1,5 +1,5 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
-% Part 3B - Closed-loop Operation with Sensor & Actuator Faults
+% Part 3B - Closed-loop FDI with Sensor & Actuator Faults
 clear
 close all
 
@@ -139,14 +139,14 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
-stepSensor = true;         % works
+stepSensor = false;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
-driftActuator = false;      % works
+driftActuator = true;      % works
 
 % FDI setup % 
-stepThreshold = deg2rad(1);                             % step fault threshold
-driftThreshold = deg2rad(0.01);                         % drift fault threshold                       
+stepThreshold = deg2rad(1.5);                             % step fault threshold (2.5 SDF)
+driftThreshold = deg2rad(0.001);                         % drift fault threshold                       
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
@@ -191,9 +191,9 @@ for time = 0:stepSize:endTime
         actuatorFaultOffset = 0;
     end
     
-    % Apply actuator faults BEFORE limiting %
+    % Apply actuator faults % 
     if time >= faultStartTime
-        u(2) = deltaRCommand + actuatorFaultOffset;
+        u(2) = u(2) + actuatorFaultOffset;
     end
 
     % Apply Actuator Saturation and Rate Limits %
@@ -285,75 +285,61 @@ exportMode = false;                         % controls plots saving as eps
 if exportMode
     % Individual plots
     figure;
-    plot(toutRef, rad2deg(xoutRef(:,5)), 'b'); hold on;
-    plot(toutRef, rad2deg(xDesoutRef(:,5)), 'k');
+    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    yline(rad2deg(stepThreshold), 'k--');
+    yline(-rad2deg(stepThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
-    set(gca, "TickLabelInterpreter", 'latex');
-    legend('Heading', ' Command', 'Interpreter', 'latex');
-    grid on;
-    hold off;
-    saveas(gcf, '3a_yaw.eps', 'epsc');
-
-    figure;
-    plot(toutRef, rad2deg(uoutRef(:,2)), 'b'); hold on;
-    plot(toutRef, rad2deg(uoutRef(:,1)), 'r');
-    ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
-    xlabel('Time (s)', 'Interpreter', 'latex');
-    set(gca, "TickLabelInterpreter", 'latex');
-    legend('Rudder', 'Aileron', 'Interpreter', 'latex');
-    grid on;
-    hold off;
-    saveas(gcf, '3a_deflections.eps', 'epsc');
-
-    figure;
-    plot(toutRef, rad2deg(xoutRef(:,2)),  'b');
-    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
-    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    hold off;
-    saveas(gcf, '3a_yaw_rate.eps', 'epsc');
+    saveas(gcf, '3d_actuator_step.eps', 'epsc');
 
 else
     % Subplots
     figure;
 
-    subplot(3,1,1);
+    % Yaw %
+    subplot(4,1,1);
     plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
-    plot(toutRef, rad2deg(xoutRef(:,5)), 'b', 'LineWidth', 1.5); hold on;
+    plot(toutRef, rad2deg(xoutRef(:,5)), 'b', 'LineWidth', 0.25); hold on;
     plot(toutRef, rad2deg(xDesoutRef(:,5)), 'k');
-    %ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Effect of Sensor Fault on Heading', 'Interpreter', 'latex');
-    legend('Heading', ' Command', 'Interpreter', 'latex');
+    legend('Heading', 'Reference', 'Command', 'Interpreter', 'latex');
     grid on;
     hold off;
 
-    subplot(3,1,2);
+    % Rudder %
+    subplot(4,1,2);
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
-    plot(toutRef, rad2deg(uoutRef(:,2)), 'b'); hold on;
-    plot(toutRef, rad2deg(uoutRef(:,1)), 'r');
+    plot(toutRef, rad2deg(uoutRef(:,2)), 'b', 'LineWidth', 0.25); hold on;
     ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    %ylim([-25 35]);
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Rudder Deflection Over Time', 'Interpreter', 'latex');
-    legend('Rudder', 'Aileron', 'Interpreter', 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
 
-    subplot(3,1,3);
-    %plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
-    plot(toutRef, rad2deg(xoutRef(:,2)),  'b');
+    % Aileron % 
+    subplot(4,1,3);
+    plot(tout, rad2deg(uout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    plot(toutRef, rad2deg(uoutRef(:,1)), 'b', 'LineWidth', 0.25);
+    ylabel('$\delta_a$ (deg)', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    set(gca, "TickLabelInterpreter", 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
+    grid on;
+    hold off;
+
+    % Yaw rate  %
+    subplot(4,1,4);
+    plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
+    plot(toutRef, rad2deg(xoutRef(:,2)), 'b', 'LineWidth', 0.25);
     ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    %ylim([-40 40]);
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Yaw Rate Over Time', 'Interpreter', 'latex');
-    %legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
+    legend('Yaw rate', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off
 end
