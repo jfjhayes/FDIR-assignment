@@ -140,7 +140,7 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
 stepSensor = false;         % works
-stepActuator = true;       % works
+stepActuator = false;       % works
 driftSensor = false;         % works
 driftActuator = false;      % works
 
@@ -176,8 +176,6 @@ for time = 0:stepSize:endTime
     % Controller % 
     error = x - xDes;
     u = -0.06 * K * error;
-
-
 
     % Actuator Faults % 
     if time >= faultStartTime
