@@ -139,10 +139,10 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
-stepSensor = false;         % works
+stepSensor = true;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
-driftActuator = true;      % works
+driftActuator = false;      % works
 
 % FDI setup % 
 stepThreshold = deg2rad(1.5);                             % step fault threshold (2.5 SDF)
@@ -280,7 +280,7 @@ fprintf('Faulty Rise Time: %.2f sec\n Faulty Overshoot: %.2f deg\n Faulty Settli
 
 
 %% Output Plotting
-exportMode = false;                         % controls plots saving as eps
+exportMode = true;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
@@ -292,7 +292,7 @@ if exportMode
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    saveas(gcf, '3d_actuator_step.eps', 'epsc');
+    saveas(gcf, '3d_sensor_step.eps', 'epsc');
 
 else
     % Subplots

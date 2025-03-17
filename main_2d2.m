@@ -150,7 +150,7 @@ for time = 0:stepSize:endTime
 
     % Actuator Faults % 
     if time >= faultStartTime
-        if stepActuator && ~actuatorFaultApplied
+        if stepActuator %&& ~actuatorFaultApplied
             actuatorFaultOffset = stepFaultActuator; 
             actuatorFaultApplied = true;
         end
@@ -256,6 +256,8 @@ ylabel('Residual (deg)', 'Interpreter', 'latex');
 set(gca, "TickLabelInterpreter", 'latex');
 grid on;
 saveas(gcf, '2d_sensor_drift.eps', 'epsc');
+
+
 
 
 %% Output Plotting
