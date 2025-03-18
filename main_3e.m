@@ -139,8 +139,8 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
-stepSensor = false;         % works
-stepActuator = true;       % works
+stepSensor = true;         % works
+stepActuator = false;       % works
 driftSensor = false;         % works
 driftActuator = false;      % works
 
@@ -216,9 +216,6 @@ for time = 0:stepSize:endTime
         xdot = latModel(x, u);
         x = RK4(@latModel, stepSize, x, u);
     end
-
-    %xdot = latModel(x, u);
-    %x = RK4(@latModel, stepSize, x, u);
 
     % Sensor faults % 
     if time >= faultStartTime

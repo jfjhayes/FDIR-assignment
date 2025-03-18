@@ -1,5 +1,5 @@
 %% ENG5031: Fault Detection, Isolation, & Recovery 5 - Assignment
-% Part 2F - NOISY
+% Part 3B - Closed-loop FDI with Sensor & Actuator Faults
 clear
 close all
 
@@ -22,16 +22,25 @@ deltaRRef = 0;                                          % rudder deflection angl
 xRef = [pRef, rRef, betaRef, phiRef, psiRef]';          % state vector
 xdotRef = zeros(5,1);                                   % state derivatives
 uRef = [deltaARef, deltaRRef]';                         % input vector
+xDesRef = zeros(1,5);
 
-% Zig-zag Setup %
-psiTargetRef = deg2rad(20);                             % heading target (rad)
-deltaRCommandRef = deg2rad(20);                         % initial rudder command (rad)
+% Manoeuvre Setup %
+psiTargetRef = deg2rad(35);                             % heading target (rad)
+deltaRCommandRef = deg2rad(0);                          % initial rudder command (rad)
+manoeuvreStartTime = 20;                                % manoeuvre start time (s)
 
 % Simulation Conditions % 
 stepSizeRef = 0.01;                                     % integration step size
 commIntervalRef = 0.01;                                 % communications interval
-endTimeRef = 120;                                       % simulation duration (s)
+endTimeRef = 60;                                        % simulation duration (s)
 iRef = 1;                                               % initialise counter
+
+% LQR setup %
+A = [-8.5905, 2.0389, -14.5793, 0, 0; 0.3801, -2.2406,  17.5075, 0, 0; 0.0692, -0.7468, -0.3510, 0.2442, 0; 1, 0.0694, 0, 0, 0; 0, 1, 0, 0, 0]; 
+B = [19.6050, -0.6821; -0.8672, 3.4921; 0, 0; 0, 0; 0, 0];
+Q = diag([40, 1.5, 22, 0.68, 270]); 
+R = diag([0.196, 0.9]); 
+[K,~,~] = lqr(A, B, Q, R);
 
 % Preallocate reference simulation storage arrays (stops MATLAB being angry w/ me) %
 numStepsRef = endTimeRef / commIntervalRef + 1;
@@ -39,6 +48,7 @@ toutRef = zeros(numStepsRef, 1);                       % time
 xoutRef = zeros(numStepsRef, length(xRef));            % states    
 xdotoutRef = zeros(numStepsRef, length(xdotRef));      % state derivatives
 uoutRef = zeros(numStepsRef, length(uRef));            % actuator inputs
+xDesoutRef = zeros(numStepsRef, length(xDesRef));
 
 % Simulation Loop % 
 for timeRef = 0:stepSizeRef:endTimeRef
@@ -50,21 +60,22 @@ for timeRef = 0:stepSizeRef:endTimeRef
         xoutRef(iRef,:) = xRef;
         xdotoutRef(iRef,:) = xdotRef;
         uoutRef(iRef,:) = uRef;
+        xDesoutRef(iRef,:) = xDesRef;
     end
 
-    % Reference Zig-zag logic % 
-    if abs(xRef(5)) >= psiTargetRef                         % if yaw exceeds absolute 20 deg
-        deltaRCommandRef = -sign(xRef(5)) * deg2rad(20);    % reverse rudder input
+    % LQR controller % 
+    if timeRef >= manoeuvreStartTime 
+        xDesRef = [0 0 0 0 psiTargetRef]';
+        errorRef = xRef - xDesRef;
+        uRef = -0.06 * K * errorRef;
+    else
+        xDesRef = [0 0 0 0 0]';
     end
 
     % Reference Apply Actuator Saturation and Rate Limits %
     if iRef > 1
         uRef = limitActuators([uRef(1); uRef(2)], uoutRef(iRef-1,:)', deltaMax, deltaMaxRate, stepSizeRef);
     end
- 
-    % Reference Rudder Command & Actuator Rate limit %
-    deltaRRef = uRef(2) + sign(deltaRCommandRef - uRef(2)) * min(deltaMaxRate * stepSizeRef, abs(deltaRCommandRef - uRef(2)));
-    uRef(2) = max(-deltaMax, min(deltaMax, deltaRRef));
 
     uoutRef(iRef,:) = uRef';
 
@@ -73,7 +84,11 @@ for timeRef = 0:stepSizeRef:endTimeRef
     xRef = RK4(@latModel, stepSizeRef, xRef, uRef);
 end
 
-%% Faulty (Real) Simulation
+% Performance Analysis % 
+[riseTimeRef, overshootRef, settlingTimeRef, steadyStateErrorRef] = performanceAnalysis(toutRef, xoutRef, psiTargetRef, manoeuvreStartTime);
+fprintf('Reference Rise Time: %.2f sec\n Reference Overshoot: %.2f deg\n Reference Settling Time: %.2f sec\n Reference Steady-State Error: %.2f deg\n', riseTimeRef, overshootRef, settlingTimeRef, steadyStateErrorRef);
+
+%% Faulty Simulation
 p = 0;                                      % roll rate (rads^-1)
 r = 0;                                      % yaw rate (rads^-1)
 beta = 0;                                   % sideslip angle (rad)
@@ -85,44 +100,53 @@ deltaR = 0;                                 % rudder deflection angle (rad)
 x = [p, r, beta, phi, psi]';                % state vector
 xdot = zeros(5,1);                          % state derivatives
 u = [deltaA, deltaR]';                      % input vector
+xDes = zeros(1,5);
 
-% Zig-zag Setup %  
-psiTarget = deg2rad(20);                    % heading target (rad)
-deltaRCommand = deg2rad(20);                % initial rudder command (rad)
-deltaACommand = deg2rad(20);                % initial aileron command (rad) - only used if actuator is kaput
+% Manoeuvre Setup %
+psiTarget = deg2rad(35);                             % heading target (rad)
+deltaRCommand = deg2rad(0);                          % initial rudder command (rad)
+manoeuvreStartTime = 20;                                % manoeuvre start time (s)
 
 % Simulation Conditions % 
-stepSize = 0.01;                            % integration step size
-commInterval = 0.01;                        % communications interval
-endTime = 120;                              % simulation duration (s)
-i = 1;                                      % initialise counter
+stepSize = 0.01;                                     % integration step size
+commInterval = 0.01;                                 % communications interval
+endTime = 60;                                        % simulation duration (s)
+i = 1;                                               % initialise counter
 
-% Preallocate simulation storage arrays (stops MATLAB being angry w/ me) %
+% LQR setup %
+A = [-8.5905, 2.0389, -14.5793, 0, 0; 0.3801, -2.2406,  17.5075, 0, 0; 0.0692, -0.7468, -0.3510, 0.2442, 0; 1, 0.0694, 0, 0, 0; 0, 1, 0, 0, 0]; 
+B = [19.6050, -0.6821; -0.8672, 3.4921; 0, 0; 0, 0; 0, 0];
+Q = diag([40, 1.5, 22, 0.68, 270]); 
+R = diag([0.196, 0.9]); 
+[K,~,~] = lqr(A, B, Q, R);
+
+% Preallocate reference simulation storage arrays (stops MATLAB being angry w/ me) %
 numSteps = endTime / commInterval + 1;
-tout = zeros(numSteps, 1);                  % time
-xout = zeros(numSteps, length(x));          % states    
-xdotout = zeros(numSteps, length(xdot));    % state derivatives
-uout = zeros(numSteps, length(u));          % actuator inputs
-residualout = zeros(numSteps, 2);           % residuals
+tout = zeros(numSteps, 1);                       % time 
+xout = zeros(numSteps, length(x));            % states    
+xdotout = zeros(numSteps, length(xdot));      % state derivatives
+uout = zeros(numSteps, length(u));            % actuator inputs
+xDesout = zeros(numSteps, length(xDes));
+residualout = zeros(numSteps, 2);   % residuals
 
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
 stepFaultActuator = deg2rad(10);            % actuator stepwise fault of 10 degree (rad)
-driftRateSensor = deg2rad(2.5);             % sensor driftwise fault of 2.5 deg/s (rad/s)
+driftRateSensor = deg2rad(0.5);             % sensor driftwise fault of 2.5 deg/s (rad/s)
 driftRateActuator = deg2rad(0.1);           % actuator driftwise fault of 0.1 deg/s (rad/s)
 sensorFaultApplied = false;                 % initialise sensor flag (FAULT EYES ONLY)
 actuatorFaultApplied = false;               % initialise actuator flag (FAULT EYES ONLY)
 
 % Fault toggles % 
-faultStartTime = 30;        % fault start time (s)
+faultStartTime = 10;        % fault start time (s)
 stepSensor = false;         % works
 stepActuator = false;       % works
-driftSensor = false;        % works
+driftSensor = false;         % works
 driftActuator = false;      % works
 
 % FDI setup % 
-stepThreshold = deg2rad(10);                             % step fault threshold
-driftThreshold = deg2rad(5);                         % drift fault threshold                       
+stepThreshold = deg2rad(1.5);                             % step fault threshold (2.5 SDF)
+driftThreshold = deg2rad(0.00001);                         % drift fault threshold                       
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
@@ -135,27 +159,26 @@ noiseMag = deg2rad(25);
 
 for time = 0:stepSize:endTime
 
-    % Data Logging for each commInterval %
-    if rem(time, commInterval)==0
+    % Data logging for each commInterval
+    if rem(time, commIntervalRef) == 0
         i = i+1;
-        tout(i) = time;                                 % store time
-        xdotout(i,:) = xdot;	                        % store state derivatives
-        xout(i,:) = x;                                  % store states
-        uout(i,:) = u;                                  % store actuator inputs
+        tout(i) = time;
+        xout(i,:) = x;
+        xdotout(i,:) = xdot;
+        uout(i,:) = u;
+        xDesout(i,:) = xDes;
     end
 
-    % Acutator Recovery Step 1: Kill rudder once fault detected %
-    if actuatorFaultDetected
-        deltaRCommand = 0;
+    % Control logic % 
+    if time >= manoeuvreStartTime 
+        xDes = [0 0 0 0 psiTarget]';
     else
-        if abs(x(5)) >= psiTarget
-            deltaRCommand = -sign(x(5)) * deg2rad(20);
-        end
+        xDes = [0 0 0 0 0]';
     end
 
-    % Rudder Command & Actuator Rate limit %
-    deltaR = u(2) + sign(deltaRCommand - u(2)) * min(deltaMaxRate * stepSize, abs(deltaRCommand - u(2)));
-    u(2) = max(-deltaMax, min(deltaMax, deltaR));
+    % Controller % 
+    error = x - xDes;
+    u = -0.06 * K * error;
 
     % Actuator Faults % 
     if time >= faultStartTime
@@ -170,22 +193,14 @@ for time = 0:stepSize:endTime
     else
         actuatorFaultOffset = 0;
     end
-    
-    % Apply rudder faults BEFORE limiting %
-    if time >= faultStartTime
-        u(2) = deltaRCommand + actuatorFaultOffset;
-    end
 
-    % Actuator Recovery Step 2: Swap to aileron % 
+    % Apply actuator fault and some recovery%
     if actuatorFaultDetected
-        if abs(x(4)) >= psiTarget
-        deltaACommand = -sign(x(4)) * deg2rad(20);
+        if time >= faultStartTime
+            u(2) = 0 + actuatorFaultOffset;
         end
-
-        deltaA = u(1) + sign(deltaACommand - u(1)) * min(deltaMaxRate * stepSize, abs(deltaACommand - u(1)));
-        u(1) = max(-deltaMax, min(deltaMax, deltaA));
-
-        u(1) = deltaACommand;
+    else
+        u(2) = u(2) + actuatorFaultOffset;
     end
 
     % Apply Actuator Saturation and Rate Limits %
@@ -194,6 +209,7 @@ for time = 0:stepSize:endTime
     end
 
     uout(i,:) = u';
+
 
     % Sensor Recovery w/ software reconfig %
     if sensorFaultDetected                              % swap to indexed reference sensor
@@ -223,7 +239,6 @@ for time = 0:stepSize:endTime
     if i > 20                                       % slight delay for filter to work
         x(5) = x(5) + (noiseMag * rand(1) * randi([-1, 1], 1));
     end
-
 
     % Fault Detection %
     sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
@@ -277,107 +292,103 @@ for time = 0:stepSize:endTime
 
 end
 
+% Performance Analysis % 
+[riseTime, overshoot, settlingTime, steadyStateError] = performanceAnalysis(tout, xout, psiTarget, manoeuvreStartTime);
+fprintf('Faulty Rise Time: %.2f sec\n Faulty Overshoot: %.2f deg\n Faulty Settling Time: %.2f sec\n Faulty Steady-State Error: %.2f deg\n', riseTime, overshoot, settlingTime, steadyStateError);
+
 
 %% Output Plotting
-exportMode = true;                         % controls plots saving as eps
+exportMode = false;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
     figure;
     plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
-    plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
-    ylim([-275 600]);
+    plot(toutRef, rad2deg(xoutRef(:,5)), 'b', 'LineWidth', 0.25); hold on;
+    plot(toutRef, rad2deg(xDesoutRef(:,5)), 'k');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
-    legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
+    legend('Heading', 'Reference', 'Command', 'Interpreter', 'latex');
     grid on;
     hold off;
-    %saveas(gcf, '2f_unfaulty_sgolay_yaw.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_yaw.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
-    plot(tout, rad2deg(uout(:,1)), 'LineWidth', 1.5);
-    plot(tout, rad2deg(uoutRef(:,2)), 'b--', 'LineWidth', 1.5);hold on;
-    ylabel('$\delta$ (deg)', 'Interpreter', 'latex');
+    plot(toutRef, rad2deg(uoutRef(:,2)), 'b', 'LineWidth', 0.25); hold on;
+    ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-25 35]);
     set(gca, "TickLabelInterpreter", 'latex');
-    %legend('Faulty $\delta_r$', 'Reference $\delta_r$', 'Interpreter', 'latex');
-    legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
-    %saveas(gcf, '2f_unfaulty_sgolay_deflection.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_RUDdeflections.eps', 'epsc');
 
-
-    figure
-    plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
-    plot(tout, rad2deg(xoutRef(:,2)),  'b--', 'LineWidth', 1.5);
-    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
+    figure;
+    plot(tout, rad2deg(uout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    plot(toutRef, rad2deg(uoutRef(:,1)), 'b', 'LineWidth', 0.25);
+    ylabel('$\delta_a$ (deg)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-40 40]);
     set(gca, "TickLabelInterpreter", 'latex');
-    legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
-    hold off
-    %saveas(gcf, '2f_unfaulty__sgolay_yaw_rate.eps', 'epsc');
+    hold off;
+    saveas(gcf, '3e_actuator_step_AIRdeflections.eps', 'epsc');
 
-    figure
-    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
-    %yline(rad2deg(driftThreshold), 'k--');
-    %yline(-rad2deg(driftThreshold), 'k--');
+    figure;
+    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    %yline(rad2deg(stepThreshold), 'k--');
+    %yline(-rad2deg(stepThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    %saveas(gcf, '2f_unfaulty_sgolay_residual.eps', 'epsc');
-
+    saveas(gcf, '3e_actuator_step_residual.eps', 'epsc');
 
 else
     % Subplots
     figure;
 
+    % Yaw %
     subplot(4,1,1);
     plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
-    plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
-    ylim([-275 600]);
+    plot(toutRef, rad2deg(xoutRef(:,5)), 'b', 'LineWidth', 0.25); hold on;
+    plot(toutRef, rad2deg(xDesoutRef(:,5)), 'k');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Effect of Sensor Fault on Heading', 'Interpreter', 'latex');
-    legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
+    legend('Heading', 'Reference', 'Command', 'Interpreter', 'latex');
     grid on;
     hold off;
 
+    % Rudder %
     subplot(4,1,2);
-    stairs(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
-    stairs(tout, rad2deg(uout(:,1)), 'LineWidth', 1.5); hold on;
-    stairs(tout, rad2deg(uoutRef(:,2)), 'b--', 'LineWidth', 1.5);
-    ylabel('$\delta$ (deg)', 'Interpreter', 'latex');
+    plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
+    plot(toutRef, rad2deg(uoutRef(:,2)), 'b', 'LineWidth', 0.25); hold on;
+    ylabel('$\delta_r$ (deg)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-25 35]);
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Rudder Deflection Over Time', 'Interpreter', 'latex');
-    legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
 
+    % Aileron % 
     subplot(4,1,3);
-    plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
-    plot(tout, rad2deg(xoutRef(:,2)),  'b--', 'LineWidth', 1.5);
-    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
+    plot(tout, rad2deg(uout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    plot(toutRef, rad2deg(uoutRef(:,1)), 'b', 'LineWidth', 0.25);
+    ylabel('$\delta_a$ (deg)', 'Interpreter', 'latex');
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-40 40]);
     set(gca, "TickLabelInterpreter", 'latex');
-    title('Yaw Rate Over Time', 'Interpreter', 'latex');
-    legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
+    legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
-    hold off
+    hold off;
 
+    % Yaw rate  %
     subplot(4,1,4);
-    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
-    yline(rad2deg(driftThreshold), 'k--');
-    yline(-rad2deg(driftThreshold), 'k--');
+    plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+    %yline(rad2deg(driftThreshold), 'k--');
+    %yline(-rad2deg(driftThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
