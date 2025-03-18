@@ -140,13 +140,13 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 % Fault toggles % 
 faultStartTime = 10;        % fault start time (s)
 stepSensor = false;         % works
-stepActuator = false;       % works
+stepActuator = true;       % works
 driftSensor = false;         % works
 driftActuator = false;      % works
 
 % FDI setup % 
 stepThreshold = deg2rad(1.5);                             % step fault threshold (2.5 SDF)
-driftThreshold = deg2rad(0.0001);                         % drift fault threshold                       
+driftThreshold = deg2rad(0.00001);                         % drift fault threshold                       
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
@@ -190,14 +190,14 @@ for time = 0:stepSize:endTime
     else
         actuatorFaultOffset = 0;
     end
-    
-    % Apply actuator faults % 
-    if time >= faultStartTime
-        u(2) = u(2) + actuatorFaultOffset;
-    end
 
+    % Apply actuator fault and some recovery%
     if actuatorFaultDetected
-        u(2) = 0 + actuatorFaultOffset;
+        if time >= faultStartTime
+            u(2) = 0 + actuatorFaultOffset;
+        end
+    else
+        u(2) = u(2) + actuatorFaultOffset;
     end
 
     % Apply Actuator Saturation and Rate Limits %
@@ -207,6 +207,7 @@ for time = 0:stepSize:endTime
 
     uout(i,:) = u';
 
+
     % Sensor Recovery w/ software reconfig %
     if sensorFaultDetected                              % swap to indexed reference sensor
         xdot = latModel(xoutRef(i,:)', u);
@@ -215,6 +216,9 @@ for time = 0:stepSize:endTime
         xdot = latModel(x, u);
         x = RK4(@latModel, stepSize, x, u);
     end
+
+    %xdot = latModel(x, u);
+    %x = RK4(@latModel, stepSize, x, u);
 
     % Sensor faults % 
     if time >= faultStartTime
@@ -303,7 +307,7 @@ if exportMode
     legend('Heading', 'Reference', 'Command', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3e_actuator_drift_yaw.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_yaw.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
@@ -314,7 +318,7 @@ if exportMode
     legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3e_actuator_drift_RUDdeflections.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_RUDdeflections.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(uout(:,1)), 'r', 'LineWidth', 1.5); hold on;
@@ -325,7 +329,7 @@ if exportMode
     legend('Deflection', 'Reference', 'Interpreter', 'latex');
     grid on;
     hold off;
-    saveas(gcf, '3e_actuator_drift_AIRdeflections.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_AIRdeflections.eps', 'epsc');
 
     figure;
     plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
@@ -335,7 +339,7 @@ if exportMode
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    saveas(gcf, '3e_actuator_drift_residual.eps', 'epsc');
+    saveas(gcf, '3e_actuator_step_residual.eps', 'epsc');
 
 else
     % Subplots
