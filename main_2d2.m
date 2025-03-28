@@ -59,7 +59,7 @@ for timeRef = 0:stepSizeRef:endTimeRef
 
     % Reference Apply Actuator Saturation and Rate Limits %
     if iRef > 1
-        uRef = limitActuatorsRef([uRef(1); uRef(2)], uoutRef(iRef-1,:)', deltaMax, deltaMaxRate, stepSizeRef);
+        uRef = limitActuators([uRef(1); uRef(2)], uoutRef(iRef-1,:)', deltaMax, deltaMaxRate, stepSizeRef);
     end
  
     % Reference Rudder Command & Actuator Rate limit %
@@ -116,12 +116,12 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 faultStartTime = 30;        % fault start time (s)
 stepSensor = false;         % works
 stepActuator = false;       % works
-driftSensor = true;        % works
-driftActuator = false;      % works
+driftSensor = false;        % works
+driftActuator = true;      % works
 
 % FDI setup % 
-stepThreshold = deg2rad(1);                             % step fault threshold
-driftThreshold = deg2rad(0.01);                         % drift fault threshold                       
+stepThreshold = deg2rad(0.1);                             % step fault threshold
+driftThreshold = deg2rad(0.001);                         % drift fault threshold                       
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
@@ -150,7 +150,7 @@ for time = 0:stepSize:endTime
 
     % Actuator Faults % 
     if time >= faultStartTime
-        if stepActuator %&& ~actuatorFaultApplied
+        if stepActuator && ~actuatorFaultApplied
             actuatorFaultOffset = stepFaultActuator; 
             actuatorFaultApplied = true;
         end
@@ -200,31 +200,40 @@ for time = 0:stepSize:endTime
 
     faultDetected(i,:) = abs(residual(1)) > stepThreshold || abs(residual(2)) > driftThreshold;     % set generic faultDetected HIGH if above either threshold
 
-    % Residual Loop %
-    for j = 1:length(residual)
-        if i > 1
-            stepDetected(i,j) = abs(residual(j)) > stepThreshold;   % step?
-        end
+    N = 6;
 
-        if i > 10 && all(residualout(i-6:i-1, j) ~= 0)                  % wait long enough to establish trend
-            recentTrend = mean(diff(residualout(i-6:i-1, j)));          % take mean of last 5 results
-            driftDetected(i,j) = abs(recentTrend) > driftThreshold;     % drift?
+    for j = 1:length(residual)
+        if i > N
+
+            rollingMean = mean(residualout(i-N:i-1, j));  
+            rollingStd = std(residualout(i-N:i-1, j));  
+            recentTrend = mean(diff(residualout(i-N:i-1, j)));  
+    
+            stepDetected(i,j) = abs(residual(j) - rollingMean) > stepThreshold;
+    
+            driftDetected(i,j) = abs(recentTrend) > driftThreshold;
+    
+            if driftDetected(i,j)
+                stepDetected(i,j) = false; 
+            end
+
         else
+            stepDetected(i,j) = false;
             driftDetected(i,j) = false;
         end
-        
+    
         % Fault Isolation %
         if stepDetected(i,j) || driftDetected(i,j)
             if j == 1
                 faultLocation = "Sensor";
                 sensorFaultDetected = true;
-            elseif j== 2
+            elseif j == 2
                 faultLocation = "Actuator";
                 actuatorFaultDetected = true;
             else
                 faultLocation = "Unknown";
             end
-
+    
             if stepDetected(i,j)
                 faultType = "Step Fault";
             elseif driftDetected(i,j)
@@ -248,14 +257,14 @@ for time = 0:stepSize:endTime
 end
 
 figure;
-plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 1.5); hold on;
+plot(tout, rad2deg(residualout(:,2)), 'r', 'LineWidth', 1.5); hold on;
 yline(rad2deg(driftThreshold), 'k--');
 yline(-rad2deg(driftThreshold), 'k--');
 xlabel('Time (s)', 'Interpreter', 'latex');
 ylabel('Residual (deg)', 'Interpreter', 'latex');
 set(gca, "TickLabelInterpreter", 'latex');
 grid on;
-saveas(gcf, '2d_sensor_drift.eps', 'epsc');
+saveas(gcf, '2d_actuator_drift.eps', 'epsc');
 
 
 

@@ -216,55 +216,64 @@ for time = 0:stepSize:endTime
         end
     end
 
-    % Fault Detection %
-    sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
-    actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
-    residual = [sensorResidual actuatorResidual];                       % residual matrix
+ % Fault Detection %
+ sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
+ actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
+ residual = [sensorResidual actuatorResidual];                       % residual matrix
 
-    faultDetected(i,:) = abs(residual(1)) > stepThreshold || abs(residual(2)) > driftThreshold;     % set generic faultDetected HIGH if above either threshold
+ faultDetected(i,:) = abs(residual(1)) > stepThreshold || abs(residual(2)) > driftThreshold;     % set generic faultDetected HIGH if above either threshold
 
-    % Residual Loop %
-    for j = 1:length(residual)
-        if i > 1
-            stepDetected(i,j) = abs(residual(j)) > stepThreshold;   % step?
-        end
+ N = 6;
 
-        if i > 10 && all(residualout(i-6:i-1, j) ~= 0)                  % wait long enough to establish trend
-            recentTrend = mean(diff(residualout(i-6:i-1, j)));          % take mean of last 5 results
-            driftDetected(i,j) = abs(recentTrend) > driftThreshold;     % drift?
-        else
-            driftDetected(i,j) = false;
-        end
-        
-        % Fault Isolation %
-        if stepDetected(i,j) || driftDetected(i,j)
-            if j == 1
-                faultLocation = "Sensor";
-                sensorFaultDetected = true;
-            elseif j== 2
-                faultLocation = "Actuator";
-                actuatorFaultDetected = true;
-            else
-                faultLocation = "Unknown";
-            end
+ for j = 1:length(residual)
+     if i > N
 
-            if stepDetected(i,j)
-                faultType = "Step Fault";
-            elseif driftDetected(i,j)
-                faultType = "Drift Fault";
-            else
-                faultType = "Unknown";
-            end
+         rollingMean = mean(residualout(i-N:i-1, j));  
+         rollingStd = std(residualout(i-N:i-1, j));  
+         recentTrend = mean(diff(residualout(i-N:i-1, j)));  
+ 
+         stepDetected(i,j) = abs(residual(j) - rollingMean) > stepThreshold;
+ 
+         driftDetected(i,j) = abs(recentTrend) > driftThreshold;
+ 
+         if driftDetected(i,j)
+             stepDetected(i,j) = false; 
+         end
 
-            if firstOccurence
-                fprintf("Fault detected in %s: %s above threshold at time %ds\n ", faultLocation, faultType, round(tout(i)));     % what's up, Doc?
-                firstOccurence = false;
-            end
-        end
-    end
+     else
+         stepDetected(i,j) = false;
+         driftDetected(i,j) = false;
+     end
+ 
+     % Fault Isolation %
+     if stepDetected(i,j) || driftDetected(i,j)
+         if j == 1
+             faultLocation = "Sensor";
+             sensorFaultDetected = true;
+         elseif j == 2
+             faultLocation = "Actuator";
+             actuatorFaultDetected = true;
+         else
+             faultLocation = "Unknown";
+         end
+ 
+         if stepDetected(i,j)
+             faultType = "Step Fault";
+         elseif driftDetected(i,j)
+             faultType = "Drift Fault";
+         else
+             faultType = "Unknown";
+         end
 
-    % Store residual %
-    residualout(i,:) = residual;
+         if firstOccurence
+             fprintf("Fault detected in %s: %s above threshold at time %ds\n ", faultLocation, faultType, round(tout(i)));     % what's up, Doc?
+             firstOccurence = false;
+         end
+     end
+ end
+
+ % Store residual %
+ residualout(i,:) = residual;
 
 end
 

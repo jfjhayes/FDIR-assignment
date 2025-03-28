@@ -280,7 +280,7 @@ fprintf('Faulty Rise Time: %.2f sec\n Faulty Overshoot: %.2f deg\n Faulty Settli
 
 
 %% Output Plotting
-exportMode = true;                         % controls plots saving as eps
+exportMode =false;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots

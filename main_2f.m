@@ -104,6 +104,7 @@ xout = zeros(numSteps, length(x));          % states
 xdotout = zeros(numSteps, length(xdot));    % state derivatives
 uout = zeros(numSteps, length(u));          % actuator inputs
 residualout = zeros(numSteps, 2);           % residuals
+x_noisy_out = zeros(numSteps,1);
 
 % Fault setup %
 stepFaultSensor = deg2rad(10);              % sensor stepwise fault of 10 degrees (rad)
@@ -115,20 +116,21 @@ actuatorFaultApplied = false;               % initialise actuator flag (FAULT EY
 
 % Fault toggles % 
 faultStartTime = 30;        % fault start time (s)
-stepSensor = false;         % works
+stepSensor = true;         % works
 stepActuator = false;       % works
 driftSensor = false;        % works
 driftActuator = false;      % works
 
 % FDI setup % 
-stepThreshold = deg2rad(10);                             % step fault threshold
-driftThreshold = deg2rad(5);                         % drift fault threshold                       
+stepThreshold = deg2rad(1);                             % step fault threshold
+driftThreshold = deg2rad(0.1);                         % drift fault threshold                      
 faultDetected = false(numSteps, size(xout, 2) - 1);     % fault detected boolean
 stepDetected = false(numSteps, size(xout, 2) - 1);      % step fault boolean
 driftDetected = false(numSteps, size(xout, 2) - 1);     % drift fault boolean
 firstOccurence = true;                                  % stops repetition
 sensorFaultDetected = false;                            % for controller
 actuatorFaultDetected = false;                          % for controller
+
 
 % Noise setup %
 noiseMag = deg2rad(25);
@@ -204,6 +206,37 @@ for time = 0:stepSize:endTime
         x = RK4(@latModel, stepSize, x, u);
     end
 
+    % Bring the noise %
+    if i > 9                                       % slight delay for filter to work
+        x(5) = x(5) + (noiseMag * rand(1) * randi([-1, 1], 1));
+        x_noisy_out(i) = x(5) + (noiseMag * rand(1) * randi([-1, 1], 1));
+    end
+    % 2nd order butterworth
+    fs = 1 / stepSize;  
+    fc = 0.01;
+    Wn = fc / (fs / 2);  
+
+    % Define Butterworth filter
+    [b, a] = butter(2, Wn, 'low');
+
+
+    if i > 11
+        residual_filtered = filtfilt(b, a, residualout(1:i-1, 1));    
+        x(5) = xoutRef(i, 5) + residual_filtered(end);
+        xout(i-1,5)  = x(5);
+    else
+        x(5) = xoutRef(i, 5); 
+        xout(i-1,5)  = x(5);
+    end
+
+    % Fault Detection %
+    sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
+    actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
+    residual = [sensorResidual actuatorResidual];                       % residual matrix
+
+    % Define Butterworth filter
+    [b, a] = butter(2, Wn, 'low');
+
     % Sensor faults % 
     if time >= faultStartTime
         if stepSensor && ~sensorFaultApplied
@@ -217,46 +250,44 @@ for time = 0:stepSize:endTime
         else
             x(5) = x(5);
         end
-    end
-
-    % Bring the noise %
-    if i > 20                                       % slight delay for filter to work
-        x(5) = x(5) + (noiseMag * rand(1) * randi([-1, 1], 1));
-    end
-
-
-    % Fault Detection %
-    sensorResidual = xout(i,5) - xoutRef(i,5);                          % calculate state vector residual for yaw angle ONLY
-    actuatorResidual = uout(i,2) - uoutRef(i,2);                        % calculate input vector residual for rudder deflection ONLY
-    residual = [sensorResidual actuatorResidual];                       % residual matrix
+    end    
 
     faultDetected(i,:) = abs(residual(1)) > stepThreshold || abs(residual(2)) > driftThreshold;     % set generic faultDetected HIGH if above either threshold
 
-    % Residual Loop %
-    for j = 1:length(residual)
-        if i > 1
-            stepDetected(i,j) = abs(residual(j)) > stepThreshold;   % step?
-        end
+    N = 6;
 
-        if i > 10 && all(residualout(i-6:i-1, j) ~= 0)                  % wait long enough to establish trend
-            recentTrend = mean(diff(residualout(i-6:i-1, j)));          % take mean of last 5 results
-            driftDetected(i,j) = abs(recentTrend) > driftThreshold;     % drift?
+    for j = 1:length(residual)
+        if i > N
+
+            rollingMean = mean(residualout(i-N:i-1, j));  
+            rollingStd = std(residualout(i-N:i-1, j));  
+            recentTrend = mean(diff(residualout(i-N:i-1, j)));  
+    
+            stepDetected(i,j) = abs(residual(j) - rollingMean) > stepThreshold;
+    
+            driftDetected(i,j) = abs(recentTrend) > driftThreshold;
+    
+            if driftDetected(i,j)
+                stepDetected(i,j) = false; 
+            end
+
         else
+            stepDetected(i,j) = false;
             driftDetected(i,j) = false;
         end
-        
+    
         % Fault Isolation %
         if stepDetected(i,j) || driftDetected(i,j)
             if j == 1
                 faultLocation = "Sensor";
                 sensorFaultDetected = true;
-            elseif j== 2
+            elseif j == 2
                 faultLocation = "Actuator";
                 actuatorFaultDetected = true;
             else
                 faultLocation = "Unknown";
             end
-
+    
             if stepDetected(i,j)
                 faultType = "Step Fault";
             elseif driftDetected(i,j)
@@ -277,60 +308,34 @@ for time = 0:stepSize:endTime
 
 end
 
-
 %% Output Plotting
-exportMode = true;                         % controls plots saving as eps
+exportMode = false;                         % controls plots saving as eps
 
 if exportMode
     % Individual plots
     figure;
-    plot(tout, rad2deg(xout(:,5)), 'r', 'LineWidth', 1.5); hold on;
-    plot(tout, rad2deg(xoutRef(:,5)), 'b--', 'LineWidth', 1.5);
+    h1 = plot(tout, rad2deg(x_noisy_out), 'Color', [1 0 0 0.1]); hold on;
+    h2 = plot(tout, rad2deg(xout(:,5)), 'Color', [1 0 0 1], 'LineWidth', 1.5); hold on;
+    h3 = plot(tout, rad2deg(xoutRef(:,5)), 'Color', [0 0 1 0.5], 'LineWidth', 1.5, 'LineStyle', '--'); hold on;
+    legend([h1, h2, h3], {'Noisy Heading', 'Filtered Heading', 'Reference Heading'}, 'Interpreter', 'latex');
     ylim([-275 600]);
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$\psi$ (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
-    legend('Faulty Heading', 'Reference Heading', 'Interpreter', 'latex');
     grid on;
     hold off;
-    %saveas(gcf, '2f_unfaulty_sgolay_yaw.eps', 'epsc');
+    saveas(gcf, '2f_sensor_step', 'epsc');
 
     figure;
-    plot(tout, rad2deg(uout(:,2)), 'r', 'LineWidth', 1.5); hold on;
-    plot(tout, rad2deg(uout(:,1)), 'LineWidth', 1.5);
-    plot(tout, rad2deg(uoutRef(:,2)), 'b--', 'LineWidth', 1.5);hold on;
-    ylabel('$\delta$ (deg)', 'Interpreter', 'latex');
-    xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-25 35]);
-    set(gca, "TickLabelInterpreter", 'latex');
-    %legend('Faulty $\delta_r$', 'Reference $\delta_r$', 'Interpreter', 'latex');
-    legend('Faulty $\delta_r$', 'Recovery $\delta_a$', 'Reference $\delta_r$', 'Interpreter', 'latex');
-    grid on;
-    hold off;
-    %saveas(gcf, '2f_unfaulty_sgolay_deflection.eps', 'epsc');
-
-
-    figure
-    plot(tout, rad2deg(xout(:,2)), 'r', 'LineWidth', 1.5); hold on
-    plot(tout, rad2deg(xoutRef(:,2)),  'b--', 'LineWidth', 1.5);
-    ylabel('$r$ (deg/s)', 'Interpreter', 'latex');
-    xlabel('Time (s)', 'Interpreter', 'latex');
-    ylim([-40 40]);
-    set(gca, "TickLabelInterpreter", 'latex');
-    legend('Faulty Yaw Rate', 'Reference Yaw Rate', 'Interpreter', 'latex');
-    grid on;
-    hold off
-    %saveas(gcf, '2f_unfaulty__sgolay_yaw_rate.eps', 'epsc');
-
-    figure
     plot(tout, rad2deg(residualout(:,1)), 'r', 'LineWidth', 0.25); hold on;
-    %yline(rad2deg(driftThreshold), 'k--');
-    %yline(-rad2deg(driftThreshold), 'k--');
+    yline(rad2deg(stepThreshold), 'k--');
+    yline(-rad2deg(stepThreshold), 'k--');
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Residual (deg)', 'Interpreter', 'latex');
     set(gca, "TickLabelInterpreter", 'latex');
     grid on;
-    %saveas(gcf, '2f_unfaulty_sgolay_residual.eps', 'epsc');
+    saveas(gcf, '2f_sensor_step_residuals', 'epsc');
+  
 
 
 else
